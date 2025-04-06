@@ -16,7 +16,19 @@ export interface CategorizedCommits {
   breaking: Commit[]
 }
 
-const COMMIT_TYPES = ['feat', 'fix', 'chore', 'docs', 'refactor', 'perf', 'test', 'ci', 'style', 'revert'] as const
+const COMMIT_TYPES = [
+  'feat',
+  'fix',
+  'chore',
+  'docs',
+  'refactor',
+  'perf',
+  'test',
+  'ci',
+  'style',
+  'revert',
+  'build'
+] as const
 const COMMIT_REGEX = new RegExp(`^(${COMMIT_TYPES.join('|')})(!?)(?:\\(([^)]+)\\))?: (.+)`)
 
 export const parseCommit = (message: string): Commit => {
