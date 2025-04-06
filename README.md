@@ -54,11 +54,12 @@ jobs:
 | ------------------------ | ---------------------------------------------- | -------- | ----------------------------- |
 | `github-token`           | Token used for GitHub API authentication       | Yes      | -                             |
 | `tag-prefix`             | The prefix for version tags                    | No       | `v`                           |
+| `release-branch`         | The branch to use for the release              | No       | `main`                        |
 | `commit-regex`           | Custom regex pattern for commit messages       | No       | Conventional Commits standard |
 | `dry-run`                | Simulate the process without creating releases | No       | `false`                       |
 | `release-notes-template` | Template for release notes formatting          | No       | Default template              |
 | `bump-rules`             | Custom commit type to version bump mapping     | No       | Default rules                 |
-| `initial-version`        |                                                | No       | 1.0.0                         |
+| `initial-version`        | The initial version to start from              | No       | `1.0.0`                       |
 
 ## Outputs
 
@@ -81,23 +82,37 @@ The action follows these rules to determine version bumps:
 
 Release notes are automatically generated and include:
 
-- Breaking changes
-- New features
-- Bug fixes
-- Other changes
+- ✨ Features
+- 🐛 Bug fixes
+- 💥 Breaking changes
 - Contributors list
 
-## Monorepo Support
+The default template format is:
 
-For monorepos, you can configure the action to handle multiple packages:
+```handlebars
+{{#if features}}
+  ### ✨ Features
+  {{#each features}}
+    -
+    {{this.message}}
+  {{/each}}
+{{/if}}
 
-```yaml
-- name: Create Release Draft
-  uses: 21stdigital/savr-action@v1
-  with:
-    github-token: ${{ secrets.GITHUB_TOKEN }}
-    monorepo-packages: 'packages/core,packages/ui,packages/api'
-    monorepo-independent: true
+{{#if fixes}}
+  ### 🐛 Fixes
+  {{#each fixes}}
+    -
+    {{this.message}}
+  {{/each}}
+{{/if}}
+
+{{#if breaking}}
+  ### 💥 Breaking Changes
+  {{#each breaking}}
+    -
+    {{this.message}}
+  {{/each}}
+{{/if}}
 ```
 
 ## Contributing

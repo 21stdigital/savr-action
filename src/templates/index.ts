@@ -1,3 +1,4 @@
+import { debug, error, info } from '@actions/core'
 import Handlebars from 'handlebars'
 
 import { CategorizedCommits } from '../commits/index.js'
@@ -24,6 +25,20 @@ const DEFAULT_TEMPLATE = `
 `
 
 export const compileReleaseNotes = (template: string, data: ReleaseNotesData): string => {
-  const compiledTemplate = Handlebars.compile(template || DEFAULT_TEMPLATE)
-  return compiledTemplate(data)
+  debug(`Compiling release notes for version ${data.version}`)
+  debug(`Template statistics:
+    - Features: ${String(data.features.length)}
+    - Fixes: ${String(data.fixes.length)}
+    - Breaking changes: ${String(data.breaking.length)}`)
+
+  try {
+    const compiledTemplate = Handlebars.compile(template || DEFAULT_TEMPLATE)
+    const releaseNotes = compiledTemplate(data)
+
+    info('Release notes compiled successfully')
+    return releaseNotes
+  } catch (err) {
+    error(`Failed to compile release notes: ${err instanceof Error ? err.message : String(err)}`)
+    throw err
+  }
 }
