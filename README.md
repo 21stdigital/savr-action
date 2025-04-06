@@ -1,4 +1,11 @@
-# SAVR - Semantic Automated Version Release
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="logo-dark.svg">
+    <img src="logo-dark.svg" alt="SAVR Logo" width="200"/>
+  </picture>
+  <br>
+  SAVR - Semantic Automated Version Release
+</h1>
 
 A GitHub Action that automatically drafts semantic GitHub Releases based on Conventional Commits. This action is designed for trunk-based development workflows and helps maintain a clean release history.
 
@@ -8,7 +15,6 @@ A GitHub Action that automatically drafts semantic GitHub Releases based on Conv
 - 📝 Generates detailed release notes from commit history
 - 🏷️ Creates and updates draft releases
 - 🔧 Configurable version tag prefix and commit message patterns
-- 🏢 Monorepo support with independent versioning
 - 🧪 Dry-run mode for testing
 
 ## Usage
