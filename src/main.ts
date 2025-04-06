@@ -74,9 +74,12 @@ export const run = async (): Promise<void> => {
   let newVersion = latestTag.version
   const versionBump = determineVersionBump(categorizedCommits)
 
-  if (versionBump != null) {
-    newVersion = incrementVersion(newVersion, versionBump)
+  if (versionBump == null) {
+    info('No version bump needed - skipping release creation')
+    return
   }
+
+  newVersion = incrementVersion(newVersion, versionBump)
 
   const releaseNotes = compileReleaseNotes(releaseNotesTemplate, {
     version: newVersion,

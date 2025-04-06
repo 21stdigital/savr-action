@@ -37,7 +37,7 @@ jobs:
           fetch-depth: 0
 
       - name: Create Release Draft
-        uses: 21stdigital/savr-action@v1.0.0
+        uses: 21stdigital/savr-action@v1.0.1
         with:
           github-token: ${{ secrets.PAT_TOKEN }} # Personal Access Token with repo scope
           # Optional configuration:
