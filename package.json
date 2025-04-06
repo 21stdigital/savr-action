@@ -11,7 +11,8 @@
   "scripts": {
     "build": "ncc build src/index.ts",
     "local-action": "local-action . src/main.ts .env",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test": "vitest"
   },
   "dependencies": {
     "@actions/core": "1.11.1",
@@ -26,6 +27,7 @@
     "@eslint/eslintrc": "3.3.1",
     "@eslint/js": "9.24.0",
     "@github/local-action": "3.1.4",
+    "@octokit/rest": "21.1.1",
     "@types/semver": "7.7.0",
     "@vercel/ncc": "0.38.3",
     "eslint": "9.24.0",
@@ -37,6 +39,7 @@
     "package-changed": "3.0.0",
     "prettier": "3.5.3",
     "typescript": "5.8.3",
-    "typescript-eslint": "8.29.0"
+    "typescript-eslint": "8.29.0",
+    "vitest": "3.1.1"
   }
 }
