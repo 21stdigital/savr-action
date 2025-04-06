@@ -7,7 +7,9 @@
   SAVR - Semantic Automated Version Release
 </h1>
 
-A GitHub Action that automatically drafts semantic GitHub Releases based on Conventional Commits. This action is designed for trunk-based development workflows and helps maintain a clean release history.
+> Automate semantic releases seamlessly with conventional commits.
+
+SAVR automatically generates and updates semantic version releases and drafts based on your commit messages, streamlining your GitHub release workflow.
 
 ## Features
 
