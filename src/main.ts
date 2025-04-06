@@ -27,7 +27,7 @@ export const run = async (): Promise<void> => {
     const releaseName = initialVersion
 
     // Get all commits for the initial release
-    const commits = await getCommits(githubContext, '', 'HEAD')
+    const commits = await getCommits(githubContext, releaseBranch, 'HEAD')
     info('Retrieved commits:')
     commits.forEach(commit => {
       info(`- ${commit.message} (type: ${commit.type})`)
