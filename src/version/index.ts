@@ -9,15 +9,12 @@ export interface Tag {
 
 export const incrementVersion = (version: string, type: VersionType): string => {
   const [major, minor, patch] = version.split('.').map(Number)
-
-  switch (type) {
-    case 'major':
-      return `${String(major + 1)}.0.0`
-    case 'minor':
-      return `${String(major)}.${String(minor + 1)}.0`
-    case 'patch':
-      return `${String(major)}.${String(minor)}.${String(patch + 1)}`
+  const increments = {
+    major: [major + 1, 0, 0],
+    minor: [major, minor + 1, 0],
+    patch: [major, minor, patch + 1]
   }
+  return increments[type].join('.')
 }
 
 export const getLatestVersion = (tags: Tag[], tagPrefix: string): Tag | undefined => {
