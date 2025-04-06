@@ -21,8 +21,8 @@ export const getTags = async (context: GitHubContext): Promise<Tag[]> => {
   return tags.map(tag => ({ name: tag.name, version: tag.name }))
 }
 
-export const getCommits = async (context: GitHubContext, head: string): Promise<Commit[]> => {
-  info(`Getting commits up to ${head}`)
+export const getCommits = async (context: GitHubContext, head: string, sinceTag?: string): Promise<Commit[]> => {
+  info(`Getting commits between ${sinceTag ?? 'start'} and ${head}`)
 
   const commits: Commit[] = []
   let page = 1
@@ -40,8 +40,19 @@ export const getCommits = async (context: GitHubContext, head: string): Promise<
     if (pageCommits.length === 0) {
       hasMore = false
     } else {
-      commits.push(...pageCommits.map(commit => parseCommit(commit.commit.message)))
-      page++
+      // If we have a sinceTag, stop when we reach it
+      if (sinceTag && pageCommits.some(commit => commit.sha === sinceTag)) {
+        hasMore = false
+        // Only include commits up to but not including the tag's commit
+        const commitsUpToTag = pageCommits.slice(
+          0,
+          pageCommits.findIndex(commit => commit.sha === sinceTag)
+        )
+        commits.push(...commitsUpToTag.map(commit => parseCommit(commit.commit.message)))
+      } else {
+        commits.push(...pageCommits.map(commit => parseCommit(commit.commit.message)))
+        page++
+      }
     }
   }
 
