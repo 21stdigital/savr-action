@@ -1,7 +1,7 @@
 import { getBooleanInput, getInput, info, setOutput } from '@actions/core'
 import { context, getOctokit } from '@actions/github'
 
-import { categorizeCommits, determineVersionBump, parseCommit } from './commits/index.js'
+import { categorizeCommits, determineVersionBump } from './commits/index.js'
 import { createOrUpdateRelease, getCommits, getTags } from './github/index.js'
 import { compileReleaseNotes } from './templates/index.js'
 import { getLatestVersion, incrementVersion } from './version/index.js'
@@ -26,9 +26,18 @@ export const run = async (): Promise<void> => {
     const tagName = `${tagPrefix}${initialVersion}`
     const releaseName = initialVersion
 
-    const commits = await getCommits(githubContext, releaseBranch, 'HEAD')
-    const parsedCommits = commits.map(({ message }) => parseCommit(message))
-    const categorizedCommits = categorizeCommits(parsedCommits)
+    // Get all commits for the initial release
+    const commits = await getCommits(githubContext, '', 'HEAD')
+    info('Retrieved commits:')
+    commits.forEach(commit => {
+      info(`- ${commit.message} (type: ${commit.type})`)
+    })
+
+    const categorizedCommits = categorizeCommits(commits)
+    info('Categorized commits:')
+    info(`Features: ${categorizedCommits.features.length.toString()}`)
+    info(`Fixes: ${categorizedCommits.fixes.length.toString()}`)
+    info(`Breaking: ${categorizedCommits.breaking.length.toString()}`)
 
     const releaseNotes = compileReleaseNotes(releaseNotesTemplate, {
       version: initialVersion,
@@ -53,13 +62,23 @@ export const run = async (): Promise<void> => {
 
   const { data: tagData } = await octokit.rest.git.getRef({ owner, repo, ref: `tags/${latestTag.name}` })
   const latestTagSha = tagData.object.sha
+  info(`Latest tag SHA: ${latestTagSha}`)
 
   const { data: headData } = await octokit.rest.git.getRef({ owner, repo, ref: `heads/${releaseBranch}` })
   const headSha = headData.object.sha
+  info(`Head SHA: ${headSha}`)
 
   const commits = await getCommits(githubContext, latestTagSha, headSha)
-  const parsedCommits = commits.map(({ message }) => parseCommit(message))
-  const categorizedCommits = categorizeCommits(parsedCommits)
+  info('Retrieved commits:')
+  commits.forEach(commit => {
+    info(`- ${commit.message} (type: ${commit.type})`)
+  })
+
+  const categorizedCommits = categorizeCommits(commits)
+  info('Categorized commits:')
+  info(`Features: ${categorizedCommits.features.length.toString()}`)
+  info(`Fixes: ${categorizedCommits.fixes.length.toString()}`)
+  info(`Breaking: ${categorizedCommits.breaking.length.toString()}`)
 
   let newVersion = latestTag.version
   const versionBump = determineVersionBump(categorizedCommits)

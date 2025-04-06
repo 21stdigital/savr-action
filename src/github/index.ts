@@ -1,3 +1,4 @@
+import { info } from '@actions/core'
 import { getOctokit } from '@actions/github'
 
 import { Commit, parseCommit } from '../commits/index.js'
@@ -21,14 +22,22 @@ export const getTags = async (context: GitHubContext): Promise<Tag[]> => {
 }
 
 export const getCommits = async (context: GitHubContext, base: string, head: string): Promise<Commit[]> => {
-  const { data: comparison } = await context.octokit.rest.repos.compareCommits({
+  info(`Getting commits from ${base} to ${head}`)
+
+  // Get all commits
+  const { data: commits } = await context.octokit.rest.repos.listCommits({
     owner: context.owner,
     repo: context.repo,
-    base,
-    head
+    sha: head,
+    per_page: 100
   })
 
-  return comparison.commits.map(commit => parseCommit(commit.commit.message))
+  info(`Found ${commits.length.toString()} commits`)
+  commits.forEach(commit => {
+    info(`Commit: ${commit.sha.substring(0, 7)} - ${commit.commit.message}`)
+  })
+
+  return commits.map(commit => parseCommit(commit.commit.message))
 }
 
 export const createOrUpdateRelease = async (
