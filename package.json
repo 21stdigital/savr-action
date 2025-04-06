@@ -22,10 +22,10 @@
     "@commitlint/config-conventional": "19.8.0",
     "@commitlint/types": "19.8.0",
     "@eslint/eslintrc": "3.3.1",
-    "@eslint/js": "9.23.0",
+    "@eslint/js": "9.24.0",
     "@github/local-action": "3.1.4",
     "@vercel/ncc": "0.38.3",
-    "eslint": "9.23.0",
+    "eslint": "9.24.0",
     "eslint-plugin-import": "2.31.0",
     "eslint-plugin-prefer-arrow-functions": "3.6.2",
     "eslint-plugin-simple-import-sort": "12.1.1",
@@ -33,7 +33,7 @@
     "lint-staged": "15.5.0",
     "package-changed": "3.0.0",
     "prettier": "3.5.3",
-    "typescript": "5.8.2",
-    "typescript-eslint": "8.28.0"
+    "typescript": "5.8.3",
+    "typescript-eslint": "8.29.0"
   }
 }
