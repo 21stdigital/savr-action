@@ -1,6 +1,6 @@
 <h1 align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="logo-dark.svg" width="200">
+    <source media="(prefers-color-scheme: dark)" srcset="logo-dark.svg">
     <img src="logo-dark.svg" alt="SAVR Logo" width="200"/>
   </picture>
   <br>
