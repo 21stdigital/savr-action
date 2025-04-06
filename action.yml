@@ -1,11 +1,11 @@
-name: SAVR
+name: SAVR Action
 description: GitHub Action that automatically drafts semantic GitHub Releases based on Conventional Commits.
 author: Fabian Pahl
 
 # Add your action's branding here. This will appear on the GitHub Marketplace.
 branding:
   icon: tag
-  color: gray
+  color: gray-dark
 
 # Define your inputs here.
 inputs:
