@@ -34,5 +34,4 @@ jobs:
       - name: Run Semantic Automatic Version Releaser
         uses: ./
         with:
-          github_token: ${{ secrets.GH_TOKEN }}
-          dry_run: false
+          github-token: ${{ secrets.GH_TOKEN }}
