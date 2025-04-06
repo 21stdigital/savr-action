@@ -1,23 +1,67 @@
 name: SAVR
-description: Provide a description here
+description: GitHub Action that automatically drafts semantic GitHub Releases based on Conventional Commits.
 author: Fabian Pahl
 
 # Add your action's branding here. This will appear on the GitHub Marketplace.
 branding:
-  icon: heart
-  color: red
+  icon: tag
+  color: gray
 
 # Define your inputs here.
 inputs:
-  milliseconds:
-    description: Your input description here
+  github-token:
+    description: Token used for GitHub API authentication
     required: true
-    default: '1000'
+  tag-prefix:
+    description: 'The prefix for version tags (default: v)'
+    required: false
+    default: 'v'
+  release-branch:
+    description: The branch to use for the release
+    required: false
+    default: 'main'
+  commit-regex:
+    description: A custom regex pattern to identify and classify commit messages
+    required: false
+  dry-run:
+    description: Boolean flag to simulate the process without creating or updating a release
+    required: false
+    default: 'false'
+  release-notes-template:
+    description: A template to format the generated release notes
+    required: false
+    default: |
+
+      ### Features
+      {{#each features}}
+      - {{this.message}}
+      {{/each}}
+
+      ### Fixes
+      {{#each fixes}}
+      - {{this.message}}
+      {{/each}}
+
+      ### Breaking Changes
+      {{#each breaking}}
+      - {{this.message}}
+      {{/each}}
+  bump-rules:
+    description: Custom mapping of commit types to version bump levels (major, minor, patch)
+    required: false
+  initial-version:
+    description: The initial version to start from
+    required: false
+    default: '1.0.0'
 
 # Define your outputs here.
 outputs:
-  time:
-    description: Your output description here
+  version:
+    description: The calculated version for the release
+  release-url:
+    description: The URL of the created or updated draft release
+  release-id:
+    description: The ID of the created or updated draft release
 
 runs:
   using: node20
