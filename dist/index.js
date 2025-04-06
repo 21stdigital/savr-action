@@ -73457,7 +73457,19 @@ var core = __nccwpck_require__(9999);
 var github = __nccwpck_require__(2819);
 ;// CONCATENATED MODULE: ./src/commits/index.ts
 
-const COMMIT_TYPES = ['feat', 'fix', 'chore', 'docs', 'refactor', 'perf', 'test', 'ci', 'style', 'revert'];
+const COMMIT_TYPES = [
+    'feat',
+    'fix',
+    'chore',
+    'docs',
+    'refactor',
+    'perf',
+    'test',
+    'ci',
+    'style',
+    'revert',
+    'build'
+];
 const COMMIT_REGEX = new RegExp(`^(${COMMIT_TYPES.join('|')})(!?)(?:\\(([^)]+)\\))?: (.+)`);
 const parseCommit = (message) => {
     (0,core.debug)(`Parsing commit message: ${message}`);
@@ -73769,9 +73781,11 @@ const run = async () => {
     const { categorizedCommits } = await processCommits(githubContext, headData.object.sha, tagData.object.sha);
     let newVersion = latestTag.version;
     const versionBump = determineVersionBump(categorizedCommits);
-    if (versionBump != null) {
-        newVersion = incrementVersion(newVersion, versionBump);
+    if (versionBump == null) {
+        (0,core.info)('No version bump needed - skipping release creation');
+        return;
     }
+    newVersion = incrementVersion(newVersion, versionBump);
     const releaseNotes = compileReleaseNotes(releaseNotesTemplate, {
         version: newVersion,
         ...categorizedCommits
