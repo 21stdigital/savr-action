@@ -6,7 +6,8 @@ on:
       - main
 
 jobs:
-  release:
+  draft-release:
+    name: Draft Release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

@@ -1,6 +1,6 @@
 import { getOctokit } from '@actions/github'
 
-import { Commit } from '../commits/index.js'
+import { Commit, parseCommit } from '../commits/index.js'
 import { Tag } from '../version/index.js'
 
 export interface GitHubContext {
@@ -28,13 +28,7 @@ export const getCommits = async (context: GitHubContext, base: string, head: str
     head
   })
 
-  return comparison.commits.map(commit => ({
-    // TODO: Check if this is correct
-    type: 'chore',
-    subject: commit.commit.message,
-    message: commit.commit.message,
-    breaking: false
-  }))
+  return comparison.commits.map(commit => parseCommit(commit.commit.message))
 }
 
 export const createOrUpdateRelease = async (
