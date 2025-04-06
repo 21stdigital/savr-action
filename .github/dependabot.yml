@@ -1,0 +1,38 @@
+# Dependabot Configuration
+# This file configures automated dependency updates for the project
+# It monitors both npm packages and GitHub Actions for updates
+# Updates are scheduled to run weekly to maintain a balance between staying current and avoiding excessive PRs
+# For more configuration options, see: https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
+
+version: 2
+updates:
+  # Monitor and update npm dependencies
+  - package-ecosystem: 'npm'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    # Group all dev dependencies into a single PR to reduce noise
+    groups:
+      dev-dependencies:
+        dependency-type: 'development'
+        update-types:
+          - 'minor'
+          - 'patch'
+    # Limit to 5 open PRs at a time to avoid overwhelming CI
+    open-pull-requests-limit: 5
+    # Ignore certain packages or specific version updates
+    # Uncomment and customize as needed
+    # ignore:
+    #   - dependency-name: "express"
+    #     versions: ["4.x", "5.x"]
+
+  # Monitor and update GitHub Actions
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    # Group all GitHub Actions updates into a single PR
+    groups:
+      github-actions:
+        patterns:
+          - '*'

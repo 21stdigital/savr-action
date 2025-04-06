@@ -1,0 +1,39 @@
+{
+  "name": "savr-action",
+  "description": "GitHub Action that automatically drafts semantic GitHub Releases based on Conventional Commits.",
+  "version": "0.0.0-development",
+  "author": "Fabian Pahl",
+  "type": "module",
+  "packageManager": "pnpm@10.7.1",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "tsc": "tsc",
+    "build": "ncc build src/index.ts",
+    "local-action": "local-action . src/main.ts .env",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "@actions/core": "1.11.1"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "19.8.0",
+    "@commitlint/config-conventional": "19.8.0",
+    "@commitlint/types": "19.8.0",
+    "@eslint/eslintrc": "3.3.1",
+    "@eslint/js": "9.23.0",
+    "@github/local-action": "3.1.4",
+    "@vercel/ncc": "0.38.3",
+    "eslint": "9.23.0",
+    "eslint-plugin-import": "2.31.0",
+    "eslint-plugin-prefer-arrow-functions": "3.6.2",
+    "eslint-plugin-simple-import-sort": "12.1.1",
+    "husky": "9.1.7",
+    "lint-staged": "15.5.0",
+    "package-changed": "3.0.0",
+    "prettier": "3.5.3",
+    "typescript": "5.8.2",
+    "typescript-eslint": "8.28.0"
+  }
+}

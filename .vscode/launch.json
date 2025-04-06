@@ -1,0 +1,15 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Debug Action",
+      "type": "node",
+      "request": "launch",
+      "runtimeExecutable": "pnpm",
+      "cwd": "${workspaceRoot}",
+      "args": ["local-action"],
+      "console": "integratedTerminal",
+      "skipFiles": ["<node_internals>/**", "node_modules/**"]
+    }
+  ]
+}
