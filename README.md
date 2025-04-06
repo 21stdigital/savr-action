@@ -7,17 +7,56 @@
   SAVR - Semantic Automated Version Release
 </h1>
 
-> Automate semantic releases seamlessly with conventional commits.
+> A focused GitHub Action for automated release notes and draft releases, built for teams using conventional commits.
 
-SAVR automatically generates and updates semantic version releases and drafts based on your commit messages, streamlining your GitHub release workflow.
+SAVR is a lightweight GitHub Action that does two things really well:
+
+1. Automatically generates and updates draft releases with comprehensive release notes on every push
+2. Makes it easy to publish releases manually through GitHub's UI when you're ready
+
+## Why SAVR?
+
+While there are many semantic versioning tools available, SAVR was created to solve specific pain points that other tools don't address:
+
+### 🎯 Focused on What Matters
+
+Most semantic release tools try to do everything: automatically publish releases, manage changelogs, update package versions, and more. SAVR focuses on two core needs:
+
+- Keeping your team informed about upcoming changes through live draft releases
+- Making manual releases convenient through GitHub's UI
+
+### 🔄 Live Release Notes
+
+Unlike tools that only generate release notes when publishing, SAVR maintains an up-to-date draft release on every push. This means:
+
+- Your team can see what's coming in the next release at any time
+- No more surprises when releases are published
+- Better visibility into project progress
+
+### 🎮 Manual Release Control
+
+Many tools force automated releases, which can be risky. SAVR:
+
+- Lets you control exactly when to publish releases
+- Works seamlessly with GitHub's release UI
+- Maintains the flexibility to review and adjust before publishing
+
+### 💡 Built for Conventional Commits
+
+If you're already using conventional commits, SAVR:
+
+- Leverages your existing commit messages
+- Requires no additional configuration
+- Keeps your workflow simple and familiar
 
 ## Features
 
-- 🔄 Automatically detects version bumps based on commit messages
-- 📝 Generates detailed release notes from commit history
-- 🏷️ Creates and updates draft releases
-- 🔧 Configurable version tag prefix and commit message patterns
-- 🧪 Dry-run mode for testing
+- 📝 **Live Draft Releases**: Automatically updates draft releases with the latest changes on every push
+- 🔍 **Transparent Changes**: Team members can easily see what features and fixes will be in the next release
+- 🎯 **Manual Release Control**: Publish releases when you're ready through GitHub's UI
+- 🔄 **Conventional Commits**: Leverages your existing commit messages to generate meaningful release notes
+- 🏷️ **Semantic Versioning**: Automatically suggests the next version based on commit types
+- 🧪 **Dry-run Mode**: Test changes without affecting your repository
 
 ## Usage
 
