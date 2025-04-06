@@ -1,7 +1,7 @@
 <h1 align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="logo-dark.svg">
-    <img src="logo-dark.svg" alt="SAVR Logo" width="200"/>
+    <img src="logo-light.svg" alt="SAVR Logo" width="200"/>
   </picture>
   <br>
   SAVR - Semantic Automated Version Release
@@ -20,7 +20,7 @@ A GitHub Action that automatically drafts semantic GitHub Releases based on Conv
 ## Usage
 
 ```yaml
-name: Release Draft
+name: Draft Release
 on:
   push:
     branches:
@@ -35,9 +35,9 @@ jobs:
           fetch-depth: 0
 
       - name: Create Release Draft
-        uses: 21stdigital/savr-action@v1
+        uses: 21stdigital/savr-action@v1.0.0
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+          github-token: ${{ secrets.PAT_TOKEN }} # Personal Access Token with repo scope
           # Optional configuration:
           # tag-prefix: 'v'
           # dry-run: false
@@ -50,16 +50,16 @@ jobs:
 
 ## Inputs
 
-| Input                    | Description                                    | Required | Default                       |
-| ------------------------ | ---------------------------------------------- | -------- | ----------------------------- |
-| `github-token`           | Token used for GitHub API authentication       | Yes      | -                             |
-| `tag-prefix`             | The prefix for version tags                    | No       | `v`                           |
-| `release-branch`         | The branch to use for the release              | No       | `main`                        |
-| `commit-regex`           | Custom regex pattern for commit messages       | No       | Conventional Commits standard |
-| `dry-run`                | Simulate the process without creating releases | No       | `false`                       |
-| `release-notes-template` | Template for release notes formatting          | No       | Default template              |
-| `bump-rules`             | Custom commit type to version bump mapping     | No       | Default rules                 |
-| `initial-version`        | The initial version to start from              | No       | `1.0.0`                       |
+| Input                    | Description                                                                                                                                                 | Required | Default                       |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------- |
+| `github-token`           | Personal Access Token (PAT) with `repo` scope for GitHub API authentication. The default `GITHUB_TOKEN` has insufficient permissions for creating releases. | Yes      | -                             |
+| `tag-prefix`             | The prefix for version tags                                                                                                                                 | No       | `v`                           |
+| `release-branch`         | The branch to use for the release                                                                                                                           | No       | `main`                        |
+| `commit-regex`           | Custom regex pattern for commit messages                                                                                                                    | No       | Conventional Commits standard |
+| `dry-run`                | Simulate the process without creating releases                                                                                                              | No       | `false`                       |
+| `release-notes-template` | Template for release notes formatting                                                                                                                       | No       | Default template              |
+| `bump-rules`             | Custom commit type to version bump mapping                                                                                                                  | No       | Default rules                 |
+| `initial-version`        | The initial version to start from                                                                                                                           | No       | `1.0.0`                       |
 
 ## Outputs
 
