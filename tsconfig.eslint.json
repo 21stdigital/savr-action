@@ -7,13 +7,11 @@
   },
   "exclude": ["dist", "node_modules"],
   "include": [
-    "__fixtures__",
     "__tests__",
     "src",
     "eslint.config.js",
     "commitlint.config.ts",
     "lint-staged.config.js",
-    "prettier.config.js",
-    "rollup.config.ts"
+    "prettier.config.js"
   ]
 }
