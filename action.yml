@@ -31,21 +31,26 @@ inputs:
     description: A template to format the generated release notes
     required: false
     default: |
-
-      ### Features
+      {{#if features}}
+      ### ✨ Features
       {{#each features}}
       - {{this.message}}
       {{/each}}
+      {{/if}}
 
-      ### Fixes
+      {{#if fixes}}
+      ### 🐛 Fixes
       {{#each fixes}}
       - {{this.message}}
       {{/each}}
+      {{/if}}
 
-      ### Breaking Changes
+      {{#if breaking}}
+      ### 💥 Breaking Changes
       {{#each breaking}}
       - {{this.message}}
       {{/each}}
+      {{/if}}
   bump-rules:
     description: Custom mapping of commit types to version bump levels (major, minor, patch)
     required: false

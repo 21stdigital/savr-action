@@ -6,8 +6,8 @@ import { createOrUpdateRelease, getCommits, getTags, type GitHubContext } from '
 import { compileReleaseNotes } from './templates/index.js'
 import { getLatestVersion, incrementVersion } from './version/index.js'
 
-const processCommits = async (githubContext: GitHubContext, head: string) => {
-  const commits = await getCommits(githubContext, head)
+const processCommits = async (githubContext: GitHubContext, head: string, sinceTag?: string) => {
+  const commits = await getCommits(githubContext, head, sinceTag)
   info('Retrieved commits:')
   commits.forEach(commit => {
     info(`- ${commit.message} (type: ${commit.type})`)
@@ -69,7 +69,7 @@ export const run = async (): Promise<void> => {
   info(`Latest tag SHA: ${tagData.object.sha}`)
   info(`Head SHA: ${headData.object.sha}`)
 
-  const { categorizedCommits } = await processCommits(githubContext, headData.object.sha)
+  const { categorizedCommits } = await processCommits(githubContext, headData.object.sha, tagData.object.sha)
 
   let newVersion = latestTag.version
   const versionBump = determineVersionBump(categorizedCommits)
@@ -92,7 +92,7 @@ export const run = async (): Promise<void> => {
   }
 
   const tagName = `${tagPrefix}${newVersion}`
-  const releaseName = `Release ${newVersion}`
+  const releaseName = newVersion
 
   const release = await createOrUpdateRelease(githubContext, tagName, releaseName, releaseNotes)
 
