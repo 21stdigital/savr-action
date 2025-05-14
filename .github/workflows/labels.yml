@@ -1,0 +1,10 @@
+name: Sync Labels
+
+on:
+  schedule:
+    - cron: '34 5 * * *'
+  workflow_dispatch:
+
+jobs:
+  workflows:
+    uses: 21stdigital/workflows/.github/workflows/labels.yaml@main

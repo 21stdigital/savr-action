@@ -1,0 +1,9 @@
+name: Dependabot Auto-Merge
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  workflows:
+    uses: 21stdigital/workflows/.github/workflows/dependabot-auto-merge.yml@main
