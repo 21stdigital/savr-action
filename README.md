@@ -4,7 +4,7 @@
     <img src="logo-light.svg" alt="SAVR Logo" width="200"/>
   </picture>
   <br>
-  SAVR - Semantic Automated Version Release
+  SAVR - Semantic Automatic Version Releaser
 </h1>
 
 > A focused GitHub Action for automated release notes and draft releases, built for teams using conventional commits.
