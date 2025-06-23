@@ -31,16 +31,16 @@
     "@types/semver": "7.7.0",
     "@vercel/ncc": "0.38.3",
     "eslint": "9.29.0",
-    "eslint-plugin-import": "2.31.0",
+    "eslint-plugin-import": "2.32.0",
     "eslint-plugin-prefer-arrow-functions": "3.6.2",
     "eslint-plugin-simple-import-sort": "12.1.1",
     "husky": "9.1.7",
     "lint-staged": "16.1.2",
     "package-changed": "3.0.0",
-    "prettier": "3.5.3",
+    "prettier": "3.6.0",
     "typescript": "5.8.3",
-    "typescript-eslint": "8.34.0",
-    "vitest": "3.2.3"
+    "typescript-eslint": "8.34.1",
+    "vitest": "3.2.4"
   },
   "pnpm": {
     "overrides": {
