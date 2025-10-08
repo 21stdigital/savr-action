@@ -1,26 +1,75 @@
 import { debug, error, info } from '@actions/core'
 import Handlebars from 'handlebars'
 
-import { CategorizedCommits } from '../commits/index.js'
+import { CategorizedCommits, Commit } from '../commits/index.js'
 
 export interface ReleaseNotesData extends CategorizedCommits {
   version: string
 }
 
+interface GroupedCommits {
+  scope: string
+  commits: Commit[]
+}
+
+// Register Handlebars helper to group commits by scope
+Handlebars.registerHelper('groupByScope', (commits: Commit[]): GroupedCommits[] => {
+  const grouped = new Map<string, Commit[]>()
+
+  // Group commits by scope
+  for (const commit of commits) {
+    const scope = commit.scope ?? 'General'
+    if (!grouped.has(scope)) {
+      grouped.set(scope, [])
+    }
+    const scopeCommits = grouped.get(scope)
+    if (scopeCommits) {
+      scopeCommits.push(commit)
+    }
+  }
+
+  // Convert to array and sort: General last, others alphabetically
+  const result: GroupedCommits[] = []
+  const sortedScopes = Array.from(grouped.keys()).sort((a, b) => {
+    if (a === 'General') return 1
+    if (b === 'General') return -1
+    return a.localeCompare(b)
+  })
+
+  for (const scope of sortedScopes) {
+    const commits = grouped.get(scope)
+    if (commits) {
+      result.push({ scope, commits })
+    }
+  }
+
+  return result
+})
+
 const DEFAULT_TEMPLATE = `
 ### Features
-{{#each features}}
-- {{this.message}}
+{{#each (groupByScope features)}}
+#### {{this.scope}}
+{{#each this.commits}}
+- {{this.subject}}
 {{/each}}
 
+{{/each}}
 ### Fixes
-{{#each fixes}}
-- {{this.message}}
+{{#each (groupByScope fixes)}}
+#### {{this.scope}}
+{{#each this.commits}}
+- {{this.subject}}
 {{/each}}
 
+{{/each}}
 ### Breaking Changes
-{{#each breaking}}
-- {{this.message}}
+{{#each (groupByScope breaking)}}
+#### {{this.scope}}
+{{#each this.commits}}
+- {{this.subject}}
+{{/each}}
+
 {{/each}}
 `
 
