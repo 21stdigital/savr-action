@@ -42929,11 +42929,14 @@ lib_default().registerHelper('groupByScope', (commits) => {
     const grouped = new Map();
     // Group commits by scope
     for (const commit of commits) {
-        const scope = commit.scope || 'General';
+        const scope = commit.scope ?? 'General';
         if (!grouped.has(scope)) {
             grouped.set(scope, []);
         }
-        grouped.get(scope).push(commit);
+        const scopeCommits = grouped.get(scope);
+        if (scopeCommits) {
+            scopeCommits.push(commit);
+        }
     }
     // Convert to array and sort: General last, others alphabetically
     const result = [];
@@ -42945,7 +42948,10 @@ lib_default().registerHelper('groupByScope', (commits) => {
         return a.localeCompare(b);
     });
     for (const scope of sortedScopes) {
-        result.push({ scope, commits: grouped.get(scope) });
+        const commits = grouped.get(scope);
+        if (commits) {
+            result.push({ scope, commits });
+        }
     }
     return result;
 });
