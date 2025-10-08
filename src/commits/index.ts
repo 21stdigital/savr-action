@@ -33,14 +33,16 @@ const COMMIT_REGEX = new RegExp(`^(${COMMIT_TYPES.join('|')})(!?)(?:\\(([^)]+)\\
 
 export const parseCommit = (message: string): Commit => {
   debug(`Parsing commit message: ${message}`)
-  const match = COMMIT_REGEX.exec(message)
+  // Extract only the first line for parsing and display
+  const firstLine = message.split('\n')[0]
+  const match = COMMIT_REGEX.exec(firstLine)
 
   if (!match) {
     warning('Commit message does not match conventional format, defaulting to chore type')
     return {
       type: 'chore',
-      subject: message,
-      message,
+      subject: firstLine,
+      message: firstLine,
       breaking: false
     }
   }
@@ -53,7 +55,7 @@ export const parseCommit = (message: string): Commit => {
     type,
     scope,
     subject,
-    message,
+    message: firstLine,
     breaking
   }
 }

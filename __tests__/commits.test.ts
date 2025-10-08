@@ -50,7 +50,7 @@ describe('commits', () => {
       expect(commit).toEqual({
         type: 'feat',
         subject: 'add new feature',
-        message: 'feat: add new feature\n\nThis is a detailed description of the feature.',
+        message: 'feat: add new feature',
         breaking: false
       })
     })
@@ -71,7 +71,7 @@ describe('commits', () => {
       expect(commit).toEqual({
         type: 'feat',
         subject: 'add new feature',
-        message: 'feat: add new feature\n\nBREAKING CHANGE: This is a breaking change',
+        message: 'feat: add new feature',
         breaking: true
       })
     })
