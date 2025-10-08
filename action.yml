@@ -33,22 +33,34 @@ inputs:
     default: |
       {{#if features}}
       ### ✨ Features
-      {{#each features}}
-      - {{this.message}}
+      {{#each (groupByScope features)}}
+      #### {{this.scope}}
+      {{#each this.commits}}
+      - {{this.subject}}
+      {{/each}}
+
       {{/each}}
       {{/if}}
 
       {{#if fixes}}
       ### 🐛 Fixes
-      {{#each fixes}}
-      - {{this.message}}
+      {{#each (groupByScope fixes)}}
+      #### {{this.scope}}
+      {{#each this.commits}}
+      - {{this.subject}}
+      {{/each}}
+
       {{/each}}
       {{/if}}
 
       {{#if breaking}}
       ### 💥 Breaking Changes
-      {{#each breaking}}
-      - {{this.message}}
+      {{#each (groupByScope breaking)}}
+      #### {{this.scope}}
+      {{#each this.commits}}
+      - {{this.subject}}
+      {{/each}}
+
       {{/each}}
       {{/if}}
   bump-rules:
