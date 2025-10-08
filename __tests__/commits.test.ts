@@ -75,6 +75,18 @@ describe('commits', () => {
         breaking: true
       })
     })
+
+    it('should ignore conventional commit patterns in body text', () => {
+      const commit = parseCommit(
+        'feat: support multiple languages\n\n* feat: enhance authentication flow\n* fix: update locale type'
+      )
+      expect(commit).toEqual({
+        type: 'feat',
+        subject: 'support multiple languages',
+        message: 'feat: support multiple languages',
+        breaking: false
+      })
+    })
   })
 
   describe('categorizeCommits', () => {
