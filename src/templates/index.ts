@@ -12,13 +12,21 @@ interface GroupedCommits {
   commits: Commit[]
 }
 
+// Convert scope to title case (e.g., "main-navigation" -> "Main Navigation")
+const toTitleCase = (scope: string): string => {
+  return scope
+    .split(/[-_]/)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ')
+}
+
 // Register Handlebars helper to group commits by scope
 Handlebars.registerHelper('groupByScope', (commits: Commit[]): GroupedCommits[] => {
   const grouped = new Map<string, Commit[]>()
 
   // Group commits by scope
   for (const commit of commits) {
-    const scope = commit.scope ?? 'General'
+    const scope = toTitleCase(commit.scope ?? 'General')
     if (!grouped.has(scope)) {
       grouped.set(scope, [])
     }
