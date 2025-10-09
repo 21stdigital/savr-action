@@ -42924,12 +42924,19 @@ var lib_default = /*#__PURE__*/__nccwpck_require__.n(lib);
 ;// CONCATENATED MODULE: ./src/templates/index.ts
 
 
+// Convert scope to title case (e.g., "main-navigation" -> "Main Navigation")
+const toTitleCase = (scope) => {
+    return scope
+        .split(/[-_]/)
+        .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+};
 // Register Handlebars helper to group commits by scope
 lib_default().registerHelper('groupByScope', (commits) => {
     const grouped = new Map();
     // Group commits by scope
     for (const commit of commits) {
-        const scope = commit.scope ?? 'General';
+        const scope = toTitleCase(commit.scope ?? 'General');
         if (!grouped.has(scope)) {
             grouped.set(scope, []);
         }
