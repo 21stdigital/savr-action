@@ -85,6 +85,22 @@ export const getCommits = async (context: GitHubContext, head: string, sinceTag?
   }
 }
 
+export const deleteRelease = async (context: GitHubContext, releaseId: number): Promise<void> => {
+  debug(`Deleting release with ID ${String(releaseId)}`)
+
+  try {
+    await context.octokit.rest.repos.deleteRelease({
+      owner: context.owner,
+      repo: context.repo,
+      release_id: releaseId
+    })
+    info(`Release with ID ${String(releaseId)} deleted successfully`)
+  } catch (err) {
+    error(`Failed to delete release: ${err instanceof Error ? err.message : String(err)}`)
+    throw err
+  }
+}
+
 export const createOrUpdateRelease = async (
   context: GitHubContext,
   tagName: string,
@@ -122,6 +138,17 @@ export const createOrUpdateRelease = async (
       info('Creating new draft release')
       const { data } = await context.octokit.rest.repos.createRelease(releaseParams)
       release = data
+    }
+
+    // Clean up other draft releases (keep only the current one)
+    const otherDrafts = releases.filter(({ draft, tag_name, id }) => draft && tag_name !== tagName && id !== release.id)
+
+    if (otherDrafts.length > 0) {
+      info(`Found ${String(otherDrafts.length)} old draft release(s) to delete`)
+      for (const oldDraft of otherDrafts) {
+        info(`Deleting old draft release: ${oldDraft.tag_name} (ID: ${String(oldDraft.id)})`)
+        await deleteRelease(context, oldDraft.id)
+      }
     }
 
     info(`Release ${release.tag_name} created/updated successfully`)
