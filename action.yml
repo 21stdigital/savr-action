@@ -20,9 +20,6 @@ inputs:
     description: The branch to use for the release
     required: false
     default: 'main'
-  commit-regex:
-    description: A custom regex pattern to identify and classify commit messages
-    required: false
   dry-run:
     description: Boolean flag to simulate the process without creating or updating a release
     required: false
@@ -63,9 +60,6 @@ inputs:
 
       {{/each}}
       {{/if}}
-  bump-rules:
-    description: Custom mapping of commit types to version bump levels (major, minor, patch)
-    required: false
   initial-version:
     description: The initial version to start from
     required: false
@@ -81,5 +75,5 @@ outputs:
     description: The ID of the created or updated draft release
 
 runs:
-  using: node20
+  using: node22
   main: dist/index.js

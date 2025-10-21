@@ -91,16 +91,14 @@ jobs:
 
 ## Inputs
 
-| Input                    | Description                                                                                                                                                 | Required | Default                       |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ----------------------------- |
-| `github-token`           | Personal Access Token (PAT) with `repo` scope for GitHub API authentication. The default `GITHUB_TOKEN` has insufficient permissions for creating releases. | Yes      | -                             |
-| `tag-prefix`             | The prefix for version tags                                                                                                                                 | No       | `v`                           |
-| `release-branch`         | The branch to use for the release                                                                                                                           | No       | `main`                        |
-| `commit-regex`           | Custom regex pattern for commit messages                                                                                                                    | No       | Conventional Commits standard |
-| `dry-run`                | Simulate the process without creating releases                                                                                                              | No       | `false`                       |
-| `release-notes-template` | Template for release notes formatting                                                                                                                       | No       | Default template              |
-| `bump-rules`             | Custom commit type to version bump mapping                                                                                                                  | No       | Default rules                 |
-| `initial-version`        | The initial version to start from                                                                                                                           | No       | `1.0.0`                       |
+| Input                    | Description                                                                                                                                                 | Required | Default          |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------------- |
+| `github-token`           | Personal Access Token (PAT) with `repo` scope for GitHub API authentication. The default `GITHUB_TOKEN` has insufficient permissions for creating releases. | Yes      | -                |
+| `tag-prefix`             | The prefix for version tags                                                                                                                                 | No       | `v`              |
+| `release-branch`         | The branch to use for the release                                                                                                                           | No       | `main`           |
+| `dry-run`                | Simulate the process without creating releases                                                                                                              | No       | `false`          |
+| `release-notes-template` | Template for release notes formatting                                                                                                                       | No       | Default template |
+| `initial-version`        | The initial version to start from                                                                                                                           | No       | `1.0.0`          |
 
 ## Outputs
 

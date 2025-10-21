@@ -103,5 +103,25 @@ describe('version', () => {
       expect(getLatestVersion(tags, 'release-v')).toEqual({ name: 'release-v1.1.0', version: '1.1.0' })
       expect(getLatestVersion(tags, 'version-')).toEqual({ name: 'version-1.0.1', version: '1.0.1' })
     })
+
+    it('should handle equal versions correctly in sorting', () => {
+      const tags = [
+        { name: 'v1.0.0', version: '1.0.0' },
+        { name: 'v1.0.0', version: '1.0.0' },
+        { name: 'v1.1.0', version: '1.1.0' }
+      ]
+      // Should still return the latest version even with duplicates
+      expect(getLatestVersion(tags, 'v')).toEqual({ name: 'v1.1.0', version: '1.1.0' })
+    })
+
+    it('should handle many tags (>100 tags scenario)', () => {
+      // Create 150 tags to test pagination scenario
+      const tags = []
+      for (let i = 0; i < 150; i++) {
+        tags.push({ name: `v1.0.${String(i)}`, version: `1.0.${String(i)}` })
+      }
+      const latest = getLatestVersion(tags, 'v')
+      expect(latest).toEqual({ name: 'v1.0.149', version: '1.0.149' })
+    })
   })
 })

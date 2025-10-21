@@ -143,5 +143,21 @@ describe('main', () => {
       expect(createOrUpdateRelease).not.toHaveBeenCalled()
       expect(setOutput).not.toHaveBeenCalled()
     })
+
+    it('should skip release when HEAD and tag point to same commit', async () => {
+      ;(getTags as Mock).mockResolvedValue([{ name: 'v1.0.0', version: '1.0.0' }])
+      ;(getLatestVersion as Mock).mockReturnValue({ name: 'v1.0.0', version: '1.0.0' })
+      // Mock both refs returning the same SHA
+      mockOctokit.rest.git.getRef.mockResolvedValue({
+        data: { object: { sha: 'same-sha-123' } }
+      })
+
+      await run()
+
+      // Should not process commits or create release
+      expect(getCommits).not.toHaveBeenCalled()
+      expect(createOrUpdateRelease).not.toHaveBeenCalled()
+      expect(setOutput).not.toHaveBeenCalled()
+    })
   })
 })

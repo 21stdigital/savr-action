@@ -42815,17 +42815,33 @@ const determineVersionBump = (categorizedCommits) => {
 
 const getTags = async (context) => {
     (0,core.debug)(`Fetching tags for repository ${context.owner}/${context.repo}`);
+    const allTags = [];
+    let page = 1;
+    let hasMore = true;
     try {
-        const { data: tags } = await context.octokit.rest.repos.listTags({
-            owner: context.owner,
-            repo: context.repo,
-            per_page: 100
-        });
-        (0,core.info)(`Found ${String(tags.length)} tags`);
-        return tags.map(tag => ({
-            name: tag.name,
-            version: tag.name
-        }));
+        while (hasMore) {
+            (0,core.debug)(`Fetching tags page ${String(page)}`);
+            const { data: tags } = await context.octokit.rest.repos.listTags({
+                owner: context.owner,
+                repo: context.repo,
+                per_page: 100,
+                page
+            });
+            if (tags.length === 0) {
+                (0,core.debug)('No more tags found');
+                hasMore = false;
+            }
+            else {
+                (0,core.debug)(`Found ${String(tags.length)} tags on page ${String(page)}`);
+                allTags.push(...tags.map(tag => ({
+                    name: tag.name,
+                    version: tag.name
+                })));
+                page++;
+            }
+        }
+        (0,core.info)(`Found ${String(allTags.length)} total tags`);
+        return allTags;
     }
     catch (err) {
         (0,core.error)(`Failed to fetch tags: ${err instanceof Error ? err.message : String(err)}`);
@@ -42875,6 +42891,21 @@ const getCommits = async (context, head, sinceTag) => {
         throw err;
     }
 };
+const deleteRelease = async (context, releaseId) => {
+    (0,core.debug)(`Deleting release with ID ${String(releaseId)}`);
+    try {
+        await context.octokit.rest.repos.deleteRelease({
+            owner: context.owner,
+            repo: context.repo,
+            release_id: releaseId
+        });
+        (0,core.info)(`Release with ID ${String(releaseId)} deleted successfully`);
+    }
+    catch (err) {
+        (0,core.error)(`Failed to delete release: ${err instanceof Error ? err.message : String(err)}`);
+        throw err;
+    }
+};
 const createOrUpdateRelease = async (context, tagName, releaseName, releaseNotes, draft = true) => {
     (0,core.debug)(`Checking for existing draft release with tag ${tagName}`);
     try {
@@ -42905,6 +42936,15 @@ const createOrUpdateRelease = async (context, tagName, releaseName, releaseNotes
             const { data } = await context.octokit.rest.repos.createRelease(releaseParams);
             release = data;
         }
+        // Clean up other draft releases (keep only the current one)
+        const otherDrafts = releases.filter(({ draft, tag_name, id }) => draft && tag_name !== tagName && id !== release.id);
+        if (otherDrafts.length > 0) {
+            (0,core.info)(`Found ${String(otherDrafts.length)} old draft release(s) to delete`);
+            for (const oldDraft of otherDrafts) {
+                (0,core.info)(`Deleting old draft release: ${oldDraft.tag_name} (ID: ${String(oldDraft.id)})`);
+                await deleteRelease(context, oldDraft.id);
+            }
+        }
         (0,core.info)(`Release ${release.tag_name} created/updated successfully`);
         return {
             id: release.id,
@@ -42928,7 +42968,7 @@ var lib_default = /*#__PURE__*/__nccwpck_require__.n(lib);
 const toTitleCase = (scope) => {
     return scope
         .split(/[-_]/)
-        .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
         .join(' ');
 };
 // Register Handlebars helper to group commits by scope
@@ -42995,7 +43035,9 @@ const compileReleaseNotes = (template, data) => {
     - Fixes: ${String(data.fixes.length)}
     - Breaking changes: ${String(data.breaking.length)}`);
     try {
-        const compiledTemplate = lib_default().compile(template || DEFAULT_TEMPLATE);
+        // Use default template if no template provided or if template is empty/whitespace
+        const templateToUse = template && template.trim() !== '' ? template : DEFAULT_TEMPLATE;
+        const compiledTemplate = lib_default().compile(templateToUse);
         const releaseNotes = compiledTemplate(data);
         (0,core.info)('Release notes compiled successfully');
         return releaseNotes;
@@ -43043,7 +43085,8 @@ const getLatestVersion = (tags, tagPrefix) => {
         // Remove pre-release and build metadata for comparison
         const aBase = a.version.split('-')[0].split('+')[0];
         const bBase = b.version.split('-')[0].split('+')[0];
-        return (0,semver.gt)(aBase, bBase) ? -1 : 1;
+        // Use rcompare for descending order (latest version first)
+        return (0,semver.rcompare)(aBase, bBase);
     });
     if (semverTags.length > 0) {
         (0,core.info)(`Latest version found: ${semverTags[0].version}`);
@@ -43082,6 +43125,9 @@ const run = async () => {
     const initialVersion = (0,core.getInput)('initial-version');
     const octokit = (0,github.getOctokit)(token);
     const { owner, repo } = github.context.repo;
+    if (!owner || !repo) {
+        throw new Error('Unable to determine repository owner and name from context');
+    }
     const githubContext = { owner, repo, octokit };
     const tags = await getTags(githubContext);
     const latestTag = getLatestVersion(tags, tagPrefix);
@@ -43111,6 +43157,11 @@ const run = async () => {
     const { data: headData } = await octokit.rest.git.getRef({ owner, repo, ref: `heads/${releaseBranch}` });
     (0,core.info)(`Latest tag SHA: ${tagData.object.sha}`);
     (0,core.info)(`Head SHA: ${headData.object.sha}`);
+    // If HEAD and tag point to the same commit, there are no new commits to process
+    if (headData.object.sha === tagData.object.sha) {
+        (0,core.info)('HEAD and latest tag point to the same commit - no changes to release');
+        return;
+    }
     const { categorizedCommits } = await processCommits(githubContext, headData.object.sha, tagData.object.sha);
     let newVersion = latestTag.version;
     const versionBump = determineVersionBump(categorizedCommits);
@@ -43140,5 +43191,13 @@ const run = async () => {
 
 ;// CONCATENATED MODULE: ./src/index.ts
 
-void run();
+
+run().catch((error) => {
+    if (error instanceof Error) {
+        (0,core.setFailed)(error.message);
+    }
+    else {
+        (0,core.setFailed)(`An unexpected error occurred: ${String(error)}`);
+    }
+});
 

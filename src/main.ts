@@ -32,6 +32,11 @@ export const run = async (): Promise<void> => {
 
   const octokit = getOctokit(token)
   const { owner, repo } = context.repo
+
+  if (!owner || !repo) {
+    throw new Error('Unable to determine repository owner and name from context')
+  }
+
   const githubContext = { owner, repo, octokit }
 
   const tags = await getTags(githubContext)
@@ -68,6 +73,12 @@ export const run = async (): Promise<void> => {
 
   info(`Latest tag SHA: ${tagData.object.sha}`)
   info(`Head SHA: ${headData.object.sha}`)
+
+  // If HEAD and tag point to the same commit, there are no new commits to process
+  if (headData.object.sha === tagData.object.sha) {
+    info('HEAD and latest tag point to the same commit - no changes to release')
+    return
+  }
 
   const { categorizedCommits } = await processCommits(githubContext, headData.object.sha, tagData.object.sha)
 
