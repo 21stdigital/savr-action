@@ -1,5 +1,5 @@
 import { debug, info, warning } from '@actions/core'
-import { gt, valid } from 'semver'
+import { rcompare, valid } from 'semver'
 
 export type VersionType = 'major' | 'minor' | 'patch'
 
@@ -47,7 +47,8 @@ export const getLatestVersion = (tags: Tag[], tagPrefix: string): Tag | undefine
       // Remove pre-release and build metadata for comparison
       const aBase = a.version.split('-')[0].split('+')[0]
       const bBase = b.version.split('-')[0].split('+')[0]
-      return gt(aBase, bBase) ? -1 : 1
+      // Use rcompare for descending order (latest version first)
+      return rcompare(aBase, bBase)
     })
 
   if (semverTags.length > 0) {

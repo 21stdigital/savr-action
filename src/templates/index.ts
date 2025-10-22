@@ -89,7 +89,9 @@ export const compileReleaseNotes = (template: string, data: ReleaseNotesData): s
     - Breaking changes: ${String(data.breaking.length)}`)
 
   try {
-    const compiledTemplate = Handlebars.compile(template || DEFAULT_TEMPLATE)
+    // Use default template if no template provided or if template is empty/whitespace
+    const templateToUse = template && template.trim() !== '' ? template : DEFAULT_TEMPLATE
+    const compiledTemplate = Handlebars.compile(templateToUse)
     const releaseNotes = compiledTemplate(data)
 
     info('Release notes compiled successfully')

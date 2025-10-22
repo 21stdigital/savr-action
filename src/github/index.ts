@@ -19,18 +19,37 @@ export interface GitHubRelease {
 export const getTags = async (context: GitHubContext): Promise<Tag[]> => {
   debug(`Fetching tags for repository ${context.owner}/${context.repo}`)
 
-  try {
-    const { data: tags } = await context.octokit.rest.repos.listTags({
-      owner: context.owner,
-      repo: context.repo,
-      per_page: 100
-    })
+  const allTags: Tag[] = []
+  let page = 1
+  let hasMore = true
 
-    info(`Found ${String(tags.length)} tags`)
-    return tags.map(tag => ({
-      name: tag.name,
-      version: tag.name
-    }))
+  try {
+    while (hasMore) {
+      debug(`Fetching tags page ${String(page)}`)
+      const { data: tags } = await context.octokit.rest.repos.listTags({
+        owner: context.owner,
+        repo: context.repo,
+        per_page: 100,
+        page
+      })
+
+      if (tags.length === 0) {
+        debug('No more tags found')
+        hasMore = false
+      } else {
+        debug(`Found ${String(tags.length)} tags on page ${String(page)}`)
+        allTags.push(
+          ...tags.map(tag => ({
+            name: tag.name,
+            version: tag.name
+          }))
+        )
+        page++
+      }
+    }
+
+    info(`Found ${String(allTags.length)} total tags`)
+    return allTags
   } catch (err) {
     error(`Failed to fetch tags: ${err instanceof Error ? err.message : String(err)}`)
     throw err

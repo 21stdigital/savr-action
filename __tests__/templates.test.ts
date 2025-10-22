@@ -393,5 +393,34 @@ describe('templates', () => {
       expect(notes).toContain('#### Api')
       expect(notes).toContain('remove deprecated endpoints')
     })
+
+    it('should use default template when template is only whitespace', () => {
+      const data = {
+        version: '1.0.0',
+        features: [{ type: 'feat', subject: 'new feature', message: 'feat: new feature', breaking: false }],
+        fixes: [],
+        breaking: []
+      }
+
+      const notes = compileReleaseNotes('   \n  \t  ', data)
+      // Should use default template, not empty template
+      expect(notes).toContain('### Features')
+      expect(notes).toContain('#### General')
+      expect(notes).toContain('new feature')
+    })
+
+    it('should handle empty string template by using default', () => {
+      const data = {
+        version: '1.0.0',
+        features: [{ type: 'feat', subject: 'new feature', message: 'feat: new feature', breaking: false }],
+        fixes: [],
+        breaking: []
+      }
+
+      const notes = compileReleaseNotes('', data)
+      // Empty string should trigger default template
+      expect(notes).toContain('### Features')
+      expect(notes).toContain('new feature')
+    })
   })
 })
