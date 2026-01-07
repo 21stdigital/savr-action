@@ -21730,7 +21730,7 @@ const kClosedResolve = Symbol('kClosedResolve')
 const channels = {}
 
 try {
-  const diagnosticsChannel = __nccwpck_require__(4018)
+  const diagnosticsChannel = __nccwpck_require__(1637)
   channels.sendHeaders = diagnosticsChannel.channel('undici:client:sendHeaders')
   channels.beforeConnect = diagnosticsChannel.channel('undici:client:beforeConnect')
   channels.connectError = diagnosticsChannel.channel('undici:client:connectError')
@@ -25372,7 +25372,7 @@ const channels = {}
 let extractBody
 
 try {
-  const diagnosticsChannel = __nccwpck_require__(4018)
+  const diagnosticsChannel = __nccwpck_require__(1637)
   channels.create = diagnosticsChannel.channel('undici:request:create')
   channels.bodySent = diagnosticsChannel.channel('undici:request:bodySent')
   channels.headers = diagnosticsChannel.channel('undici:request:headers')
@@ -38804,7 +38804,7 @@ module.exports = {
 
 
 
-const diagnosticsChannel = __nccwpck_require__(4018)
+const diagnosticsChannel = __nccwpck_require__(1637)
 const { uid, states } = __nccwpck_require__(8420)
 const {
   kReadyState,
@@ -39551,7 +39551,7 @@ module.exports = {
 
 
 const { Writable } = __nccwpck_require__(2203)
-const diagnosticsChannel = __nccwpck_require__(4018)
+const diagnosticsChannel = __nccwpck_require__(1637)
 const { parserStates, opcodes, states, emptyBuffer } = __nccwpck_require__(8420)
 const { kReadyState, kSentClose, kResponse, kReceivedClose } = __nccwpck_require__(6708)
 const { isValidStatusCode, failWebsocketConnection, websocketMessageReceived } = __nccwpck_require__(8829)
@@ -40877,7 +40877,7 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("crypto");
 
 /***/ }),
 
-/***/ 4018:
+/***/ 1637:
 /***/ ((module) => {
 
 module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("diagnostics_channel");
@@ -42738,7 +42738,42 @@ var __webpack_exports__ = {};
 var core = __nccwpck_require__(6966);
 // EXTERNAL MODULE: ./node_modules/.pnpm/@actions+github@6.0.1/node_modules/@actions/github/lib/github.js
 var github = __nccwpck_require__(4903);
+;// CONCATENATED MODULE: ./src/utils/index.ts
+/**
+ * Utility functions for safe logging and string handling
+ */
+/**
+ * Sanitizes a string for safe logging in GitHub Actions.
+ *
+ * GitHub Actions interprets lines starting with `::` as workflow commands.
+ * Malicious or accidental commit messages containing these patterns could:
+ * - Inject fake annotations (::error::, ::warning::, ::notice::)
+ * - Mask arbitrary strings (::add-mask::)
+ * - Manipulate workflow outputs
+ *
+ * This function escapes `::` sequences to prevent workflow command injection.
+ *
+ * @param input - The string to sanitize (e.g., commit message, release notes)
+ * @returns The sanitized string safe for logging
+ *
+ * @example
+ * ```ts
+ * // Dangerous input
+ * const message = "feat: ::set-output name=foo::bar"
+ *
+ * // Safe for logging
+ * info(sanitizeLogOutput(message))
+ * // Outputs: "feat: \u200B::\u200Bset-output name=foo\u200B::\u200Bbar"
+ * ```
+ */
+const sanitizeLogOutput = (input) => {
+    // Insert a zero-width space between the two colons to break the command pattern
+    // This preserves readability while preventing command interpretation
+    return input.replace(/::/g, ':\u200B:');
+};
+
 ;// CONCATENATED MODULE: ./src/commits/index.ts
+
 
 const COMMIT_TYPES = [
     'feat',
@@ -42755,7 +42790,8 @@ const COMMIT_TYPES = [
 ];
 const COMMIT_REGEX = new RegExp(`^(${COMMIT_TYPES.join('|')})(!?)(?:\\(([^)]+)\\))?: (.+)`);
 const parseCommit = (message) => {
-    (0,core.debug)(`Parsing commit message: ${message}`);
+    // Sanitize commit message to prevent workflow command injection in debug logs
+    (0,core.debug)(`Parsing commit message: ${sanitizeLogOutput(message)}`);
     // Extract only the first line for parsing and display
     const firstLine = message.split('\n')[0];
     const match = COMMIT_REGEX.exec(firstLine);
@@ -43103,11 +43139,13 @@ const getLatestVersion = (tags, tagPrefix) => {
 
 
 
+
 const processCommits = async (githubContext, head, sinceTag) => {
     const commits = await getCommits(githubContext, head, sinceTag);
     (0,core.info)('Retrieved commits:');
     commits.forEach(commit => {
-        (0,core.info)(`- ${commit.message} (type: ${commit.type})`);
+        // Sanitize commit message to prevent workflow command injection
+        (0,core.info)(`- ${sanitizeLogOutput(commit.message)} (type: ${commit.type})`);
     });
     const categorizedCommits = categorizeCommits(commits);
     (0,core.info)('Categorized commits:');
@@ -43144,7 +43182,8 @@ const run = async () => {
             (0,core.info)('Dry run - would create initial release with:');
             (0,core.info)(`Version: ${initialVersion}`);
             (0,core.info)('Release notes:');
-            (0,core.info)(releaseNotes);
+            // Sanitize release notes to prevent workflow command injection
+            (0,core.info)(sanitizeLogOutput(releaseNotes));
             return;
         }
         const release = await createOrUpdateRelease(githubContext, tagName, releaseName, releaseNotes);
@@ -43178,7 +43217,8 @@ const run = async () => {
         (0,core.info)('Dry run - would create/update release with:');
         (0,core.info)(`Version: ${newVersion}`);
         (0,core.info)('Release notes:');
-        (0,core.info)(releaseNotes);
+        // Sanitize release notes to prevent workflow command injection
+        (0,core.info)(sanitizeLogOutput(releaseNotes));
         return;
     }
     const tagName = `${tagPrefix}${newVersion}`;

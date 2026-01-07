@@ -4,13 +4,15 @@ import { context, getOctokit } from '@actions/github'
 import { categorizeCommits, determineVersionBump } from './commits/index.js'
 import { createOrUpdateRelease, getCommits, getTags, type GitHubContext } from './github/index.js'
 import { compileReleaseNotes } from './templates/index.js'
+import { sanitizeLogOutput } from './utils/index.js'
 import { getLatestVersion, incrementVersion } from './version/index.js'
 
 const processCommits = async (githubContext: GitHubContext, head: string, sinceTag?: string) => {
   const commits = await getCommits(githubContext, head, sinceTag)
   info('Retrieved commits:')
   commits.forEach(commit => {
-    info(`- ${commit.message} (type: ${commit.type})`)
+    // Sanitize commit message to prevent workflow command injection
+    info(`- ${sanitizeLogOutput(commit.message)} (type: ${commit.type})`)
   })
 
   const categorizedCommits = categorizeCommits(commits)
@@ -57,7 +59,8 @@ export const run = async (): Promise<void> => {
       info('Dry run - would create initial release with:')
       info(`Version: ${initialVersion}`)
       info('Release notes:')
-      info(releaseNotes)
+      // Sanitize release notes to prevent workflow command injection
+      info(sanitizeLogOutput(releaseNotes))
       return
     }
 
@@ -101,7 +104,8 @@ export const run = async (): Promise<void> => {
     info('Dry run - would create/update release with:')
     info(`Version: ${newVersion}`)
     info('Release notes:')
-    info(releaseNotes)
+    // Sanitize release notes to prevent workflow command injection
+    info(sanitizeLogOutput(releaseNotes))
     return
   }
 

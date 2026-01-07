@@ -1,5 +1,6 @@
 import { debug, info, warning } from '@actions/core'
 
+import { sanitizeLogOutput } from '../utils/index.js'
 import { VersionType } from '../version/index.js'
 
 export interface Commit {
@@ -32,7 +33,8 @@ const COMMIT_TYPES = [
 const COMMIT_REGEX = new RegExp(`^(${COMMIT_TYPES.join('|')})(!?)(?:\\(([^)]+)\\))?: (.+)`)
 
 export const parseCommit = (message: string): Commit => {
-  debug(`Parsing commit message: ${message}`)
+  // Sanitize commit message to prevent workflow command injection in debug logs
+  debug(`Parsing commit message: ${sanitizeLogOutput(message)}`)
   // Extract only the first line for parsing and display
   const firstLine = message.split('\n')[0]
   const match = COMMIT_REGEX.exec(firstLine)
