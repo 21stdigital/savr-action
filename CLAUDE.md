@@ -19,8 +19,8 @@ Compiles the action using `@vercel/ncc` to bundle everything into `dist/index.js
 ### Testing
 
 ```bash
-pnpm test          # Run all tests with Vitest
-vitest __tests__/commits.test.ts  # Run specific test file
+pnpm test                              # Run all tests with Vitest
+pnpm vitest __tests__/commits.test.ts  # Run specific test file
 ```
 
 ### Local Development
@@ -89,6 +89,11 @@ Uses Handlebars for release note generation:
 
 - `compileReleaseNotes()` - Compiles template with version and categorized commits
 - Default template organizes by Features, Fixes, and Breaking Changes sections
+- Registers `groupByScope` helper for Handlebars templates
+
+#### Utils Module (`src/utils/index.ts`)
+
+- `sanitizeLogOutput()` - Escapes `::` sequences in strings to prevent GitHub Actions workflow command injection in logs
 
 ### Configuration Files
 
@@ -130,4 +135,6 @@ Tests located in `__tests__/`:
 - `commits.test.ts` - Commit parsing and categorization
 - `version.test.ts` - Version incrementing and tag filtering
 - `templates.test.ts` - Handlebars template compilation
+- `github.test.ts` - GitHub API interactions
+- `utils.test.ts` - Utility function tests
 - `main.test.ts` - End-to-end workflow testing
