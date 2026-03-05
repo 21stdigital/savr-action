@@ -47214,16 +47214,13 @@ const getTags = async (context) => {
                 per_page: 100,
                 page
             });
-            if (tags.length === 0) {
-                core_debug('No more tags found');
-                hasMore = false;
-            }
-            else {
-                core_debug(`Found ${String(tags.length)} tags on page ${String(page)}`);
-                allTags.push(...tags.map(tag => ({
-                    name: tag.name,
-                    version: tag.name
-                })));
+            core_debug(`Found ${String(tags.length)} tags on page ${String(page)}`);
+            allTags.push(...tags.map(tag => ({
+                name: tag.name,
+                version: tag.name
+            })));
+            hasMore = tags.length === 100;
+            if (hasMore) {
                 page++;
             }
         }
@@ -47250,22 +47247,19 @@ const getCommits = async (context, head, sinceTag) => {
                 per_page: 100,
                 page
             });
-            if (pageCommits.length === 0) {
-                core_debug('No more commits found');
+            core_debug(`Found ${String(pageCommits.length)} commits on page ${String(page)}`);
+            // If we have a sinceTag, stop when we reach it
+            if (sinceTag && pageCommits.some(commit => commit.sha === sinceTag)) {
+                info(`Reached target tag ${sinceTag}, stopping commit fetch`);
+                // Only include commits up to but not including the tag's commit
+                const commitsUpToTag = pageCommits.slice(0, pageCommits.findIndex(commit => commit.sha === sinceTag));
+                commits.push(...commitsUpToTag.map(commit => parseCommit(commit.commit.message)));
                 hasMore = false;
             }
             else {
-                core_debug(`Found ${String(pageCommits.length)} commits on page ${String(page)}`);
-                // If we have a sinceTag, stop when we reach it
-                if (sinceTag && pageCommits.some(commit => commit.sha === sinceTag)) {
-                    info(`Reached target tag ${sinceTag}, stopping commit fetch`);
-                    hasMore = false;
-                    // Only include commits up to but not including the tag's commit
-                    const commitsUpToTag = pageCommits.slice(0, pageCommits.findIndex(commit => commit.sha === sinceTag));
-                    commits.push(...commitsUpToTag.map(commit => parseCommit(commit.commit.message)));
-                }
-                else {
-                    commits.push(...pageCommits.map(commit => parseCommit(commit.commit.message)));
+                commits.push(...pageCommits.map(commit => parseCommit(commit.commit.message)));
+                hasMore = pageCommits.length === 100;
+                if (hasMore) {
                     page++;
                 }
             }
@@ -47418,6 +47412,7 @@ handlebars_lib_default().registerHelper('groupByScope', (commits) => {
     return result;
 });
 const DEFAULT_TEMPLATE = `
+{{#if features}}
 ### Features
 {{#each (groupByScope features)}}
 #### {{this.scope}}
@@ -47426,6 +47421,8 @@ const DEFAULT_TEMPLATE = `
 {{/each}}
 
 {{/each}}
+{{/if}}
+{{#if fixes}}
 ### Fixes
 {{#each (groupByScope fixes)}}
 #### {{this.scope}}
@@ -47434,6 +47431,8 @@ const DEFAULT_TEMPLATE = `
 {{/each}}
 
 {{/each}}
+{{/if}}
+{{#if breaking}}
 ### Breaking Changes
 {{#each (groupByScope breaking)}}
 #### {{this.scope}}
@@ -47442,6 +47441,7 @@ const DEFAULT_TEMPLATE = `
 {{/each}}
 
 {{/each}}
+{{/if}}
 `;
 const renderReleaseNotes = (template, data) => {
     const compiledTemplate = handlebars_lib_default().compile(template);
