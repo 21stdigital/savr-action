@@ -108,6 +108,23 @@ describe('version', () => {
       expect(getLatestVersion(tags, 'version-')).toEqual({ name: 'version-1.0.1', version: '1.0.1' })
     })
 
+    it('should prefer stable over prerelease of same base version', () => {
+      const tags = [
+        { name: 'v1.0.0-rc.1', version: '1.0.0-rc.1' },
+        { name: 'v1.0.0', version: '1.0.0' }
+      ]
+      expect(getLatestVersion(tags, 'v')).toEqual({ name: 'v1.0.0', version: '1.0.0' })
+    })
+
+    it('should sort prerelease versions deterministically', () => {
+      const tags = [
+        { name: 'v1.0.0-alpha.1', version: '1.0.0-alpha.1' },
+        { name: 'v1.0.0-alpha.2', version: '1.0.0-alpha.2' },
+        { name: 'v1.0.0-beta.1', version: '1.0.0-beta.1' }
+      ]
+      expect(getLatestVersion(tags, 'v')).toEqual({ name: 'v1.0.0-beta.1', version: '1.0.0-beta.1' })
+    })
+
     it('should handle equal versions correctly in sorting', () => {
       const tags = [
         { name: 'v1.0.0', version: '1.0.0' },

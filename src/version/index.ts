@@ -28,13 +28,7 @@ export const getLatestVersion = (tags: Tag[], tagPrefix: string): Tag | undefine
       version: tag.name.replace(tagPrefix, '')
     }))
     .filter(({ version }) => valid(version))
-    .sort((a, b) => {
-      // Remove pre-release and build metadata for comparison
-      const aBase = a.version.split('-')[0].split('+')[0]
-      const bBase = b.version.split('-')[0].split('+')[0]
-      // Use rcompare for descending order (latest version first)
-      return rcompare(aBase, bBase)
-    })
+    .sort((a, b) => rcompare(a.version, b.version))
 
   if (semverTags.length > 0) {
     info(`Latest version found: ${semverTags[0].version}`)
