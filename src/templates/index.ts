@@ -1,4 +1,4 @@
-import { debug, error, info } from '@actions/core'
+import { debug, error, info, warning } from '@actions/core'
 import Handlebars from 'handlebars'
 
 import { CategorizedCommits, Commit } from '../commits/index.js'
@@ -81,6 +81,11 @@ const DEFAULT_TEMPLATE = `
 {{/each}}
 `
 
+const renderReleaseNotes = (template: string, data: ReleaseNotesData): string => {
+  const compiledTemplate = Handlebars.compile(template)
+  return compiledTemplate(data)
+}
+
 export const compileReleaseNotes = (template: string, data: ReleaseNotesData): string => {
   debug(`Compiling release notes for version ${data.version}`)
   debug(`Template statistics:
@@ -88,16 +93,32 @@ export const compileReleaseNotes = (template: string, data: ReleaseNotesData): s
     - Fixes: ${String(data.fixes.length)}
     - Breaking changes: ${String(data.breaking.length)}`)
 
-  try {
-    // Use default template if no template provided or if template is empty/whitespace
-    const templateToUse = template && template.trim() !== '' ? template : DEFAULT_TEMPLATE
-    const compiledTemplate = Handlebars.compile(templateToUse)
-    const releaseNotes = compiledTemplate(data)
+  const hasCustomTemplate = template && template.trim() !== ''
 
+  if (!hasCustomTemplate) {
+    const releaseNotes = renderReleaseNotes(DEFAULT_TEMPLATE, data)
+    info('Release notes compiled successfully')
+    return releaseNotes
+  }
+
+  try {
+    const releaseNotes = renderReleaseNotes(template, data)
     info('Release notes compiled successfully')
     return releaseNotes
   } catch (err) {
-    error(`Failed to compile release notes: ${err instanceof Error ? err.message : String(err)}`)
-    throw err
+    warning(
+      `Invalid custom release notes template provided: ${err instanceof Error ? err.message : String(err)}. Falling back to default template.`
+    )
+
+    try {
+      const releaseNotes = renderReleaseNotes(DEFAULT_TEMPLATE, data)
+      info('Release notes compiled successfully with fallback default template')
+      return releaseNotes
+    } catch (fallbackError) {
+      error(
+        `Failed to compile release notes with fallback template: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`
+      )
+      throw fallbackError
+    }
   }
 }
