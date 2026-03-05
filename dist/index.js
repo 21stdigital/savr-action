@@ -47508,13 +47508,7 @@ const getLatestVersion = (tags, tagPrefix) => {
         version: tag.name.replace(tagPrefix, '')
     }))
         .filter(({ version }) => (0,semver.valid)(version))
-        .sort((a, b) => {
-        // Remove pre-release and build metadata for comparison
-        const aBase = a.version.split('-')[0].split('+')[0];
-        const bBase = b.version.split('-')[0].split('+')[0];
-        // Use rcompare for descending order (latest version first)
-        return (0,semver.rcompare)(aBase, bBase);
-    });
+        .sort((a, b) => (0,semver.rcompare)(a.version, b.version));
     if (semverTags.length > 0) {
         info(`Latest version found: ${semverTags[0].version}`);
         return semverTags[0];
