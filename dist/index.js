@@ -47564,7 +47564,8 @@ const run = async () => {
         info(`No existing tags found. Starting from version ${initialVersion}`);
         const tagName = `${tagPrefix}${initialVersion}`;
         const releaseName = initialVersion;
-        const { categorizedCommits } = await processCommits(githubContext, 'HEAD');
+        const { data: headRef } = await octokit.rest.git.getRef({ owner, repo, ref: `heads/${releaseBranch}` });
+        const { categorizedCommits } = await processCommits(githubContext, headRef.object.sha);
         const releaseNotes = compileReleaseNotes(releaseNotesTemplate, {
             version: initialVersion,
             ...categorizedCommits
