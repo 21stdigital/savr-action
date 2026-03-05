@@ -71,12 +71,9 @@ describe('templates', () => {
       }
 
       const notes = compileReleaseNotes('', data)
-      expect(notes).toContain('### Features')
-      expect(notes).toContain('### Fixes')
-      expect(notes).toContain('### Breaking Changes')
-      expect(notes).not.toContain('feat:')
-      expect(notes).not.toContain('fix:')
-      expect(notes).not.toContain('breaking')
+      expect(notes).not.toContain('### Features')
+      expect(notes).not.toContain('### Fixes')
+      expect(notes).not.toContain('### Breaking Changes')
     })
 
     it('should handle custom template with conditional sections', () => {
@@ -168,9 +165,9 @@ describe('templates', () => {
       }
 
       const notes = compileReleaseNotes(template, data)
-      expect(notes).toContain('### Features')
-      expect(notes).toContain('### Fixes')
-      expect(notes).toContain('### Breaking Changes')
+      expect(notes).not.toContain('### Features')
+      expect(notes).not.toContain('### Fixes')
+      expect(notes).not.toContain('### Breaking Changes')
       expect(notes).not.toContain('# Release 1.0.0')
     })
     it('should handle template with nested properties', () => {
