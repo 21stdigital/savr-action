@@ -332,5 +332,38 @@ describe('github', () => {
         release_id: 101
       })
     })
+
+    it('should ignore 404 errors when deleting old drafts concurrently', async () => {
+      mockOctokit.rest.repos.listReleases.mockResolvedValue({
+        data: [
+          {
+            id: 1,
+            tag_name: 'v1.0.1',
+            draft: true,
+            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.1'
+          }
+        ]
+      })
+      mockOctokit.rest.repos.createRelease.mockResolvedValue({
+        data: {
+          id: 2,
+          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.1.0',
+          tag_name: 'v1.1.0'
+        }
+      })
+      const notFoundError = Object.assign(new Error('Not Found'), { status: 404 })
+      mockOctokit.rest.repos.deleteRelease.mockRejectedValue(notFoundError)
+
+      await expect(createOrUpdateRelease(githubContext, 'v1.1.0', '1.1.0', 'Release notes')).resolves.toEqual({
+        id: 2,
+        url: 'https://github.com/test-owner/test-repo/releases/tag/v1.1.0',
+        tagName: 'v1.1.0'
+      })
+      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        release_id: 1
+      })
+    })
   })
 })

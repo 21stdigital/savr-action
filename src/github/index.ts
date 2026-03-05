@@ -1,4 +1,4 @@
-import { debug, error, info } from '@actions/core'
+import { debug, error, info, warning } from '@actions/core'
 import { getOctokit } from '@actions/github'
 
 import { Commit, parseCommit } from '../commits/index.js'
@@ -192,7 +192,21 @@ export const createOrUpdateRelease = async (
       info(`Found ${String(otherDrafts.length)} old draft release(s) to delete`)
       for (const oldDraft of otherDrafts) {
         info(`Deleting old draft release: ${oldDraft.tag_name} (ID: ${String(oldDraft.id)})`)
-        await deleteRelease(context, oldDraft.id)
+
+        try {
+          await deleteRelease(context, oldDraft.id)
+        } catch (deletionError) {
+          const deletionStatus = (deletionError as { status?: number }).status
+
+          if (deletionStatus === 404) {
+            warning(
+              `Old draft release ${oldDraft.tag_name} (ID: ${String(oldDraft.id)}) was already deleted by another workflow run`
+            )
+            continue
+          }
+
+          throw deletionError
+        }
       }
     }
 
