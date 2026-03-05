@@ -28,7 +28,8 @@ describe('main', () => {
   const mockOctokit = {
     rest: {
       git: {
-        getRef: vi.fn()
+        getRef: vi.fn(),
+        getTag: vi.fn()
       }
     }
   }
@@ -114,6 +115,7 @@ describe('main', () => {
 
       await run()
 
+      expect(mockOctokit.rest.git.getTag).not.toHaveBeenCalled()
       expect(createOrUpdateRelease).toHaveBeenCalledWith(
         { owner: 'owner', repo: 'repo', octokit: mockOctokit },
         'v1.1.0',
@@ -155,6 +157,81 @@ describe('main', () => {
       await run()
 
       // Should not process commits or create release
+      expect(getCommits).not.toHaveBeenCalled()
+      expect(createOrUpdateRelease).not.toHaveBeenCalled()
+      expect(setOutput).not.toHaveBeenCalled()
+    })
+
+    it('should dereference annotated tags to commit SHA for commit lookup', async () => {
+      ;(getTags as Mock).mockResolvedValue([{ name: 'v1.0.0', version: '1.0.0' }])
+      ;(getLatestVersion as Mock).mockReturnValue({ name: 'v1.0.0', version: '1.0.0' })
+      mockOctokit.rest.git.getRef.mockImplementation(({ ref }: { ref: string }) => {
+        if (ref === 'tags/v1.0.0') {
+          return Promise.resolve({ data: { object: { sha: 'tag-object-sha', type: 'tag' } } })
+        }
+        return Promise.resolve({ data: { object: { sha: 'head-sha', type: 'commit' } } })
+      })
+      mockOctokit.rest.git.getTag.mockResolvedValue({
+        data: {
+          object: {
+            sha: 'tag-commit-sha',
+            type: 'commit'
+          }
+        }
+      })
+      ;(getCommits as Mock).mockResolvedValue([
+        { type: 'feat', subject: 'new feature', message: 'feat: new feature', breaking: false }
+      ])
+      ;(categorizeCommits as Mock).mockReturnValue({
+        features: [{ type: 'feat', subject: 'new feature', message: 'feat: new feature', breaking: false }],
+        fixes: [],
+        breaking: []
+      })
+      ;(determineVersionBump as Mock).mockReturnValue('minor')
+      ;(incrementVersion as Mock).mockReturnValue('1.1.0')
+      ;(compileReleaseNotes as Mock).mockReturnValue('Release notes')
+      ;(createOrUpdateRelease as Mock).mockResolvedValue({
+        url: 'https://github.com/owner/repo/releases/tag/v1.1.0',
+        id: 123,
+        tagName: 'v1.1.0'
+      })
+
+      await run()
+
+      expect(mockOctokit.rest.git.getTag).toHaveBeenCalledWith({
+        owner: 'owner',
+        repo: 'repo',
+        tag_sha: 'tag-object-sha'
+      })
+      expect(getCommits).toHaveBeenCalledWith(
+        { owner: 'owner', repo: 'repo', octokit: mockOctokit },
+        'head-sha',
+        'tag-commit-sha'
+      )
+      expect(createOrUpdateRelease).toHaveBeenCalled()
+    })
+
+    it('should skip release when HEAD matches dereferenced annotated tag commit', async () => {
+      ;(getTags as Mock).mockResolvedValue([{ name: 'v1.0.0', version: '1.0.0' }])
+      ;(getLatestVersion as Mock).mockReturnValue({ name: 'v1.0.0', version: '1.0.0' })
+      mockOctokit.rest.git.getRef.mockImplementation(({ ref }: { ref: string }) => {
+        if (ref === 'tags/v1.0.0') {
+          return Promise.resolve({ data: { object: { sha: 'tag-object-sha', type: 'tag' } } })
+        }
+        return Promise.resolve({ data: { object: { sha: 'tag-commit-sha', type: 'commit' } } })
+      })
+      mockOctokit.rest.git.getTag.mockResolvedValue({
+        data: {
+          object: {
+            sha: 'tag-commit-sha',
+            type: 'commit'
+          }
+        }
+      })
+
+      await run()
+
+      expect(mockOctokit.rest.git.getTag).toHaveBeenCalledTimes(1)
       expect(getCommits).not.toHaveBeenCalled()
       expect(createOrUpdateRelease).not.toHaveBeenCalled()
       expect(setOutput).not.toHaveBeenCalled()

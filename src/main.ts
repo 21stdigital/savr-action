@@ -74,16 +74,36 @@ export const run = async (): Promise<void> => {
   const { data: tagData } = await octokit.rest.git.getRef({ owner, repo, ref: `tags/${latestTag.name}` })
   const { data: headData } = await octokit.rest.git.getRef({ owner, repo, ref: `heads/${releaseBranch}` })
 
-  info(`Latest tag SHA: ${tagData.object.sha}`)
+  let latestTagCommitSha = tagData.object.sha
+  if (tagData.object.type === 'tag') {
+    const { data: annotatedTagData } = await octokit.rest.git.getTag({
+      owner,
+      repo,
+      tag_sha: tagData.object.sha
+    })
+
+    if (annotatedTagData.object.type !== 'commit') {
+      throw new Error(
+        `Latest tag ${latestTag.name} does not reference a commit (found: ${annotatedTagData.object.type})`
+      )
+    }
+
+    latestTagCommitSha = annotatedTagData.object.sha
+    info(`Latest tag ref SHA: ${tagData.object.sha}`)
+    info(`Latest tag commit SHA: ${latestTagCommitSha}`)
+  } else {
+    info(`Latest tag SHA: ${latestTagCommitSha}`)
+  }
+
   info(`Head SHA: ${headData.object.sha}`)
 
   // If HEAD and tag point to the same commit, there are no new commits to process
-  if (headData.object.sha === tagData.object.sha) {
+  if (headData.object.sha === latestTagCommitSha) {
     info('HEAD and latest tag point to the same commit - no changes to release')
     return
   }
 
-  const { categorizedCommits } = await processCommits(githubContext, headData.object.sha, tagData.object.sha)
+  const { categorizedCommits } = await processCommits(githubContext, headData.object.sha, latestTagCommitSha)
 
   let newVersion = latestTag.version
   const versionBump = determineVersionBump(categorizedCommits)

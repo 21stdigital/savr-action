@@ -119,7 +119,7 @@ Breaking changes are detected by:
 ### Release Logic
 
 - If no tags exist, creates initial release at `initial-version` (default: 1.0.0)
-- Compares HEAD SHA with latest tag SHA to find new commits
+- Compares HEAD SHA with latest tag commit SHA (dereferencing annotated tags first) to find new commits
 - Only creates/updates release if version bump is needed (skips if only chore/docs commits)
 - Always creates draft releases (never published automatically)
 - Reuses existing draft release for same tag name
