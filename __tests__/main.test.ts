@@ -243,5 +243,26 @@ describe('main', () => {
       expect(createOrUpdateRelease).not.toHaveBeenCalled()
       expect(setOutput).not.toHaveBeenCalled()
     })
+
+    it('should throw for invalid initial-version', async () => {
+      ;(getInput as Mock).mockImplementation((name: string) => {
+        switch (name) {
+          case 'github-token':
+            return 'token'
+          case 'tag-prefix':
+            return 'v'
+          case 'release-branch':
+            return 'main'
+          case 'release-notes-template':
+            return ''
+          case 'initial-version':
+            return 'not-valid'
+          default:
+            return ''
+        }
+      })
+
+      await expect(run()).rejects.toThrow('Invalid initial version')
+    })
   })
 })
