@@ -13,7 +13,7 @@ body:
         - github
         - templates
         - utils
-        - config
+        - main
         - other
   - type: textarea
     id: description
