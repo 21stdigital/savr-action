@@ -120,6 +120,33 @@ export const deleteRelease = async (context: GitHubContext, releaseId: number): 
   }
 }
 
+const listAllReleases = async (
+  context: GitHubContext
+): Promise<{ id: number; tag_name: string; draft: boolean; html_url: string }[]> => {
+  const allReleases: { id: number; tag_name: string; draft: boolean; html_url: string }[] = []
+  let page = 1
+  let hasMore = true
+
+  while (hasMore) {
+    debug(`Fetching releases page ${String(page)}`)
+    const { data: pageReleases } = await context.octokit.rest.repos.listReleases({
+      owner: context.owner,
+      repo: context.repo,
+      per_page: 100,
+      page
+    })
+
+    allReleases.push(...pageReleases)
+
+    hasMore = pageReleases.length === 100
+    if (hasMore) {
+      page++
+    }
+  }
+
+  return allReleases
+}
+
 export const createOrUpdateRelease = async (
   context: GitHubContext,
   tagName: string,
@@ -131,10 +158,7 @@ export const createOrUpdateRelease = async (
   debug(`Checking for existing draft release with tag ${tagName}`)
 
   try {
-    const { data: releases } = await context.octokit.rest.repos.listReleases({
-      owner: context.owner,
-      repo: context.repo
-    })
+    const releases = await listAllReleases(context)
     const existingDraft = releases.find(({ draft, tag_name }) => draft && tag_name === tagName)
 
     const releaseParams = {
