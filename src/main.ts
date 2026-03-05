@@ -132,7 +132,7 @@ export const run = async (): Promise<void> => {
   const tagName = `${tagPrefix}${newVersion}`
   const releaseName = newVersion
 
-  const release = await createOrUpdateRelease(githubContext, tagName, releaseName, releaseNotes)
+  const release = await createOrUpdateRelease(githubContext, tagName, releaseName, releaseNotes, headData.object.sha)
 
   setOutput('release-url', release.url)
   setOutput('release-id', release.id.toString())

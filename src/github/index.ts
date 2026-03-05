@@ -125,6 +125,7 @@ export const createOrUpdateRelease = async (
   tagName: string,
   releaseName: string,
   releaseNotes: string,
+  targetCommitish?: string,
   draft = true
 ): Promise<GitHubRelease> => {
   debug(`Checking for existing draft release with tag ${tagName}`)
@@ -142,7 +143,8 @@ export const createOrUpdateRelease = async (
       tag_name: tagName,
       name: releaseName,
       body: releaseNotes,
-      draft
+      draft,
+      ...(targetCommitish ? { target_commitish: targetCommitish } : {})
     }
 
     let release

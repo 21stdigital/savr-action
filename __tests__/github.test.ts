@@ -230,5 +230,54 @@ describe('github', () => {
         release_id: 1
       })
     })
+
+    it('should set target_commitish when provided for release creation', async () => {
+      mockOctokit.rest.repos.listReleases.mockResolvedValue({ data: [] })
+      mockOctokit.rest.repos.createRelease.mockResolvedValue({
+        data: {
+          id: 1,
+          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0',
+          tag_name: 'v1.0.0'
+        }
+      })
+
+      await createOrUpdateRelease(githubContext, 'v1.0.0', '1.0.0', 'Release notes', 'release-branch-sha')
+
+      expect(mockOctokit.rest.repos.createRelease).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        tag_name: 'v1.0.0',
+        name: '1.0.0',
+        body: 'Release notes',
+        draft: true,
+        target_commitish: 'release-branch-sha'
+      })
+    })
+
+    it('should set target_commitish when provided for release update', async () => {
+      mockOctokit.rest.repos.listReleases.mockResolvedValue({
+        data: [
+          {
+            id: 1,
+            tag_name: 'v1.0.0',
+            draft: true,
+            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0'
+          }
+        ]
+      })
+      mockOctokit.rest.repos.updateRelease.mockResolvedValue({
+        data: {
+          id: 1,
+          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0',
+          tag_name: 'v1.0.0'
+        }
+      })
+
+      await createOrUpdateRelease(githubContext, 'v1.0.0', '1.0.0', 'Updated release notes', 'release-branch-sha')
+
+      expect(mockOctokit.rest.repos.updateRelease).toHaveBeenCalledWith(
+        expect.objectContaining({ target_commitish: 'release-branch-sha', release_id: 1 })
+      )
+    })
   })
 })
