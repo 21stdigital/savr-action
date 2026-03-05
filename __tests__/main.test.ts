@@ -274,5 +274,68 @@ describe('main', () => {
 
       await expect(run()).rejects.toThrow('Invalid initial version')
     })
+
+    it('should throw when tag-prefix exceeds 20 characters', async () => {
+      ;(getInput as Mock).mockImplementation((name: string) => {
+        switch (name) {
+          case 'github-token':
+            return 'token'
+          case 'tag-prefix':
+            return 'a-very-long-prefix-that-exceeds'
+          case 'release-branch':
+            return 'main'
+          case 'release-notes-template':
+            return ''
+          case 'initial-version':
+            return '0.1.0'
+          default:
+            return ''
+        }
+      })
+
+      await expect(run()).rejects.toThrow('tag-prefix must be at most 20 characters')
+    })
+
+    it('should throw when tag-prefix contains invalid characters', async () => {
+      ;(getInput as Mock).mockImplementation((name: string) => {
+        switch (name) {
+          case 'github-token':
+            return 'token'
+          case 'tag-prefix':
+            return 'v@#!'
+          case 'release-branch':
+            return 'main'
+          case 'release-notes-template':
+            return ''
+          case 'initial-version':
+            return '0.1.0'
+          default:
+            return ''
+        }
+      })
+
+      await expect(run()).rejects.toThrow('tag-prefix contains invalid characters')
+    })
+
+    it('should throw when release-branch is empty', async () => {
+      ;(getInput as Mock).mockImplementation((name: string) => {
+        switch (name) {
+          case 'github-token':
+            return 'token'
+          case 'tag-prefix':
+            return 'v'
+          case 'release-branch':
+            return '   '
+          case 'release-notes-template':
+            return ''
+          case 'initial-version':
+            return '0.1.0'
+          default:
+            return ''
+        }
+      })
+
+      await expect(run()).rejects.toThrow('release-branch must not be empty')
+    })
   })
 })

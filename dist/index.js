@@ -47541,6 +47541,15 @@ const run = async () => {
     if (!(0,semver.valid)(initialVersion)) {
         throw new Error(`Invalid initial version: "${initialVersion}". Must be a valid semver string (e.g., 1.0.0)`);
     }
+    if (tagPrefix.length > 20) {
+        throw new Error(`tag-prefix must be at most 20 characters (got ${String(tagPrefix.length)})`);
+    }
+    if (!/^[a-zA-Z0-9._\-/]*$/.test(tagPrefix)) {
+        throw new Error(`tag-prefix contains invalid characters: "${tagPrefix}". Only alphanumeric, dots, hyphens, underscores, and slashes are allowed`);
+    }
+    if (!releaseBranch.trim()) {
+        throw new Error('release-branch must not be empty');
+    }
     const octokit = getOctokit(token);
     const { owner, repo } = github_context.repo;
     if (!owner || !repo) {
