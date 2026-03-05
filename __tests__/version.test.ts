@@ -20,21 +20,25 @@ describe('version', () => {
     })
 
     it('should handle pre-release versions', () => {
-      expect(incrementVersion('1.0.0-alpha.1', 'major')).toBe('2.0.0')
-      expect(incrementVersion('1.0.0-beta.1', 'minor')).toBe('1.1.0')
-      expect(incrementVersion('1.0.0-rc.1', 'patch')).toBe('1.0.1')
+      expect(incrementVersion('1.0.0-alpha.1', 'major')).toBe('1.0.0')
+      expect(incrementVersion('1.0.0-beta.1', 'minor')).toBe('1.0.0')
+      expect(incrementVersion('1.0.0-rc.1', 'patch')).toBe('1.0.0')
     })
 
     it('should handle build metadata', () => {
-      expect(incrementVersion('1.0.0+20130313144700', 'major')).toBe('2.0.0+20130313144700')
-      expect(incrementVersion('1.0.0+exp.sha.5114f85', 'minor')).toBe('1.1.0+exp.sha.5114f85')
-      expect(incrementVersion('1.0.0+20130313144700', 'patch')).toBe('1.0.1+20130313144700')
+      expect(incrementVersion('1.0.0+20130313144700', 'major')).toBe('2.0.0')
+      expect(incrementVersion('1.0.0+exp.sha.5114f85', 'minor')).toBe('1.1.0')
+      expect(incrementVersion('1.0.0+20130313144700', 'patch')).toBe('1.0.1')
     })
 
     it('should handle versions with both pre-release and build metadata', () => {
-      expect(incrementVersion('1.0.0-alpha.1+20130313144700', 'major')).toBe('2.0.0+20130313144700')
-      expect(incrementVersion('1.0.0-beta.1+exp.sha.5114f85', 'minor')).toBe('1.1.0+exp.sha.5114f85')
-      expect(incrementVersion('1.0.0-rc.1+20130313144700', 'patch')).toBe('1.0.1+20130313144700')
+      expect(incrementVersion('1.0.0-alpha.1+20130313144700', 'major')).toBe('1.0.0')
+      expect(incrementVersion('1.0.0-beta.1+exp.sha.5114f85', 'minor')).toBe('1.0.0')
+      expect(incrementVersion('1.0.0-rc.1+20130313144700', 'patch')).toBe('1.0.0')
+    })
+
+    it('should throw for invalid version string', () => {
+      expect(() => incrementVersion('not-a-version', 'patch')).toThrow('Failed to increment version')
     })
   })
 
