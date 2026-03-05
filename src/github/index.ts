@@ -4,6 +4,8 @@ import { getOctokit } from '@actions/github'
 import { Commit, parseCommit } from '../commits/index.js'
 import { Tag } from '../version/index.js'
 
+export const SAVR_MARKER = '<!-- savr-managed-release -->'
+
 export interface GitHubContext {
   owner: string
   repo: string
@@ -122,8 +124,8 @@ export const deleteRelease = async (context: GitHubContext, releaseId: number): 
 
 const listAllReleases = async (
   context: GitHubContext
-): Promise<{ id: number; tag_name: string; draft: boolean; html_url: string }[]> => {
-  const allReleases: { id: number; tag_name: string; draft: boolean; html_url: string }[] = []
+): Promise<{ id: number; tag_name: string; draft: boolean; html_url: string; body?: string | null }[]> => {
+  const allReleases: { id: number; tag_name: string; draft: boolean; html_url: string; body?: string | null }[] = []
   let page = 1
   let hasMore = true
 
@@ -166,7 +168,7 @@ export const createOrUpdateRelease = async (
       repo: context.repo,
       tag_name: tagName,
       name: releaseName,
-      body: releaseNotes,
+      body: `${releaseNotes}\n${SAVR_MARKER}`,
       draft,
       ...(targetCommitish ? { target_commitish: targetCommitish } : {})
     }
@@ -186,7 +188,10 @@ export const createOrUpdateRelease = async (
     }
 
     // Clean up other draft releases (keep only the current one)
-    const otherDrafts = releases.filter(({ draft, tag_name, id }) => draft && tag_name !== tagName && id !== release.id)
+    const otherDrafts = releases.filter(
+      ({ draft, tag_name, id, body }) =>
+        draft && tag_name !== tagName && id !== release.id && body?.includes(SAVR_MARKER)
+    )
 
     if (otherDrafts.length > 0) {
       info(`Found ${String(otherDrafts.length)} old draft release(s) to delete`)

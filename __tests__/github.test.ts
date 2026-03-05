@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createOrUpdateRelease, deleteRelease, type GitHubContext } from '../src/github/index.js'
+import { createOrUpdateRelease, deleteRelease, type GitHubContext, SAVR_MARKER } from '../src/github/index.js'
 
 describe('github', () => {
   const mockOctokit = {
@@ -56,7 +56,7 @@ describe('github', () => {
         repo: 'test-repo',
         tag_name: 'v1.0.0',
         name: '1.0.0',
-        body: 'Release notes',
+        body: `Release notes\n${SAVR_MARKER}`,
         draft: true
       })
       expect(result).toEqual({
@@ -73,7 +73,8 @@ describe('github', () => {
             id: 1,
             tag_name: 'v1.0.0',
             draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0'
+            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0',
+            body: `Release notes\n${SAVR_MARKER}`
           }
         ]
       })
@@ -92,7 +93,7 @@ describe('github', () => {
         repo: 'test-repo',
         tag_name: 'v1.0.0',
         name: '1.0.0',
-        body: 'Updated release notes',
+        body: `Updated release notes\n${SAVR_MARKER}`,
         draft: true,
         release_id: 1
       })
@@ -107,13 +108,15 @@ describe('github', () => {
             id: 1,
             tag_name: 'v1.0.1',
             draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.1'
+            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.1',
+            body: `Release notes\n${SAVR_MARKER}`
           },
           {
             id: 2,
             tag_name: 'v1.0.0',
             draft: false,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0'
+            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0',
+            body: 'Release notes'
           }
         ]
       })
@@ -133,7 +136,7 @@ describe('github', () => {
         repo: 'test-repo',
         tag_name: 'v1.1.0',
         name: '1.1.0',
-        body: 'Release notes',
+        body: `Release notes\n${SAVR_MARKER}`,
         draft: true
       })
       // Should delete the old draft (v1.0.1) but not the published release (v1.0.0)
@@ -153,19 +156,22 @@ describe('github', () => {
             id: 1,
             tag_name: 'v1.0.1',
             draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.1'
+            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.1',
+            body: `Release notes\n${SAVR_MARKER}`
           },
           {
             id: 2,
             tag_name: 'v1.0.2',
             draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.2'
+            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.2',
+            body: `Release notes\n${SAVR_MARKER}`
           },
           {
             id: 3,
             tag_name: 'v1.0.0',
             draft: false,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0'
+            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0',
+            body: 'Release notes'
           }
         ]
       })
@@ -201,13 +207,15 @@ describe('github', () => {
             id: 1,
             tag_name: 'v1.0.1',
             draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.1'
+            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.1',
+            body: `Release notes\n${SAVR_MARKER}`
           },
           {
             id: 2,
             tag_name: 'v1.1.0',
             draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.1.0'
+            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.1.0',
+            body: `Updated release notes\n${SAVR_MARKER}`
           }
         ]
       })
@@ -248,7 +256,7 @@ describe('github', () => {
         repo: 'test-repo',
         tag_name: 'v1.0.0',
         name: '1.0.0',
-        body: 'Release notes',
+        body: `Release notes\n${SAVR_MARKER}`,
         draft: true,
         target_commitish: 'release-branch-sha'
       })
@@ -261,7 +269,8 @@ describe('github', () => {
             id: 1,
             tag_name: 'v1.0.0',
             draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0'
+            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0',
+            body: `Release notes\n${SAVR_MARKER}`
           }
         ]
       })
@@ -298,7 +307,8 @@ describe('github', () => {
             id: 101,
             tag_name: 'v1.9.9',
             draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.9.9'
+            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.9.9',
+            body: `Release notes\n${SAVR_MARKER}`
           }
         ]
       })
@@ -333,6 +343,45 @@ describe('github', () => {
       })
     })
 
+    it('should not delete non-SAVR draft releases during cleanup', async () => {
+      mockOctokit.rest.repos.listReleases.mockResolvedValue({
+        data: [
+          {
+            id: 1,
+            tag_name: 'v1.0.1',
+            draft: true,
+            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.1',
+            body: 'Manually created draft release'
+          },
+          {
+            id: 2,
+            tag_name: 'v0.9.0',
+            draft: true,
+            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v0.9.0',
+            body: `Release notes\n${SAVR_MARKER}`
+          }
+        ]
+      })
+      mockOctokit.rest.repos.createRelease.mockResolvedValue({
+        data: {
+          id: 3,
+          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.1.0',
+          tag_name: 'v1.1.0'
+        }
+      })
+      mockOctokit.rest.repos.deleteRelease.mockResolvedValue({ data: {} })
+
+      await createOrUpdateRelease(githubContext, 'v1.1.0', '1.1.0', 'Release notes')
+
+      // Should only delete the SAVR-managed draft (v0.9.0), not the manually created one (v1.0.1)
+      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledTimes(1)
+      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        release_id: 2
+      })
+    })
+
     it('should ignore 404 errors when deleting old drafts concurrently', async () => {
       mockOctokit.rest.repos.listReleases.mockResolvedValue({
         data: [
@@ -340,7 +389,8 @@ describe('github', () => {
             id: 1,
             tag_name: 'v1.0.1',
             draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.1'
+            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.1',
+            body: `Release notes\n${SAVR_MARKER}`
           }
         ]
       })
