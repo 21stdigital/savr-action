@@ -149,7 +149,7 @@ describe('templates', () => {
       expect(notes).toContain('Breaking: false')
     })
 
-    it('should handle malformed template gracefully', () => {
+    it('should fall back to default template when custom template is malformed', () => {
       const template = `
 # Release {{version}}
 
@@ -158,7 +158,7 @@ describe('templates', () => {
 {{#each features}}
 - {{this.message}}
 {{/each}}
-{{/if}}
+{{/if}
 `
       const data = {
         version: '1.0.0',
@@ -168,10 +168,11 @@ describe('templates', () => {
       }
 
       const notes = compileReleaseNotes(template, data)
-      expect(notes).toContain('# Release 1.0.0')
-      expect(notes).not.toContain('## New Features')
+      expect(notes).toContain('### Features')
+      expect(notes).toContain('### Fixes')
+      expect(notes).toContain('### Breaking Changes')
+      expect(notes).not.toContain('# Release 1.0.0')
     })
-
     it('should handle template with nested properties', () => {
       const template = `
 # Release {{version}}

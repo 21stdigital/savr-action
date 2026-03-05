@@ -50,7 +50,7 @@ export const parseCommit = (message: string): Commit => {
   }
 
   const [, type, scope, isBreaking, subject] = match
-  const breaking = isBreaking === '!' || message.includes('BREAKING CHANGE:')
+  const breaking = isBreaking === '!' || /BREAKING[ -]CHANGE:/.test(message)
 
   debug(`Parsed commit - Type: ${type}, Scope: ${scope || 'none'}, Breaking: ${String(breaking)}`)
   return {

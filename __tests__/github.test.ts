@@ -279,5 +279,58 @@ describe('github', () => {
         expect.objectContaining({ target_commitish: 'release-branch-sha', release_id: 1 })
       )
     })
+
+    it('should paginate releases when finding existing drafts', async () => {
+      const pageOneReleases = Array.from({ length: 100 }, (_, index) => {
+        const releaseNumber = String(index + 1)
+
+        return {
+          id: index + 1,
+          tag_name: `v0.${releaseNumber}.0`,
+          draft: false,
+          html_url: `https://github.com/test-owner/test-repo/releases/tag/v0.${releaseNumber}.0`
+        }
+      })
+
+      mockOctokit.rest.repos.listReleases.mockResolvedValueOnce({ data: pageOneReleases }).mockResolvedValueOnce({
+        data: [
+          {
+            id: 101,
+            tag_name: 'v1.9.9',
+            draft: true,
+            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.9.9'
+          }
+        ]
+      })
+      mockOctokit.rest.repos.createRelease.mockResolvedValue({
+        data: {
+          id: 102,
+          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v2.0.0',
+          tag_name: 'v2.0.0'
+        }
+      })
+      mockOctokit.rest.repos.deleteRelease.mockResolvedValue({ data: {} })
+
+      await createOrUpdateRelease(githubContext, 'v2.0.0', '2.0.0', 'Release notes')
+
+      expect(mockOctokit.rest.repos.listReleases).toHaveBeenCalledTimes(2)
+      expect(mockOctokit.rest.repos.listReleases).toHaveBeenNthCalledWith(1, {
+        owner: 'test-owner',
+        repo: 'test-repo',
+        per_page: 100,
+        page: 1
+      })
+      expect(mockOctokit.rest.repos.listReleases).toHaveBeenNthCalledWith(2, {
+        owner: 'test-owner',
+        repo: 'test-repo',
+        per_page: 100,
+        page: 2
+      })
+      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        release_id: 101
+      })
+    })
   })
 })

@@ -87,6 +87,16 @@ describe('commits', () => {
       })
     })
 
+    it('should handle commit messages with hyphenated breaking change footer', () => {
+      const commit = parseCommit('feat: add new feature\n\nBREAKING-CHANGE: This is a breaking change')
+      expect(commit).toEqual({
+        type: 'feat',
+        subject: 'add new feature',
+        message: 'feat: add new feature',
+        breaking: true
+      })
+    })
+
     it('should ignore conventional commit patterns in body text', () => {
       const commit = parseCommit(
         'feat: support multiple languages\n\n* feat: enhance authentication flow\n* fix: update locale type'
