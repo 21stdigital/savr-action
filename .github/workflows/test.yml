@@ -38,5 +38,16 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Build
+        run: pnpm build
+
+      - name: Check dist/ is up to date
+        run: |
+          if [ -n "$(git diff --name-only)" ]; then
+            echo "::error::dist/ is out of date. Run 'pnpm build' and commit the changes."
+            git diff --name-only
+            exit 1
+          fi
+
       - name: Run tests
         run: pnpm test
