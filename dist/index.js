@@ -47153,7 +47153,7 @@ const parseCommit = (message) => {
         };
     }
     const [, type, scope, isBreaking, subject] = match;
-    const breaking = isBreaking === '!' || message.includes('BREAKING CHANGE:');
+    const breaking = isBreaking === '!' || /BREAKING[ -]CHANGE:/.test(message);
     core_debug(`Parsed commit - Type: ${type}, Scope: ${scope || 'none'}, Breaking: ${String(breaking)}`);
     return {
         type,
@@ -47290,13 +47290,30 @@ const deleteRelease = async (context, releaseId) => {
         throw err;
     }
 };
+const listAllReleases = async (context) => {
+    const allReleases = [];
+    let page = 1;
+    let hasMore = true;
+    while (hasMore) {
+        core_debug(`Fetching releases page ${String(page)}`);
+        const { data: pageReleases } = await context.octokit.rest.repos.listReleases({
+            owner: context.owner,
+            repo: context.repo,
+            per_page: 100,
+            page
+        });
+        allReleases.push(...pageReleases);
+        hasMore = pageReleases.length === 100;
+        if (hasMore) {
+            page++;
+        }
+    }
+    return allReleases;
+};
 const createOrUpdateRelease = async (context, tagName, releaseName, releaseNotes, targetCommitish, draft = true) => {
     core_debug(`Checking for existing draft release with tag ${tagName}`);
     try {
-        const { data: releases } = await context.octokit.rest.repos.listReleases({
-            owner: context.owner,
-            repo: context.repo
-        });
+        const releases = await listAllReleases(context);
         const existingDraft = releases.find(({ draft, tag_name }) => draft && tag_name === tagName);
         const releaseParams = {
             owner: context.owner,
@@ -47327,7 +47344,17 @@ const createOrUpdateRelease = async (context, tagName, releaseName, releaseNotes
             info(`Found ${String(otherDrafts.length)} old draft release(s) to delete`);
             for (const oldDraft of otherDrafts) {
                 info(`Deleting old draft release: ${oldDraft.tag_name} (ID: ${String(oldDraft.id)})`);
-                await deleteRelease(context, oldDraft.id);
+                try {
+                    await deleteRelease(context, oldDraft.id);
+                }
+                catch (deletionError) {
+                    const deletionStatus = deletionError.status;
+                    if (deletionStatus === 404) {
+                        warning(`Old draft release ${oldDraft.tag_name} (ID: ${String(oldDraft.id)}) was already deleted by another workflow run`);
+                        continue;
+                    }
+                    throw deletionError;
+                }
             }
         }
         info(`Release ${release.tag_name} created/updated successfully`);
@@ -47413,23 +47440,38 @@ const DEFAULT_TEMPLATE = `
 
 {{/each}}
 `;
+const renderReleaseNotes = (template, data) => {
+    const compiledTemplate = handlebars_lib_default().compile(template);
+    return compiledTemplate(data);
+};
 const compileReleaseNotes = (template, data) => {
     core_debug(`Compiling release notes for version ${data.version}`);
     core_debug(`Template statistics:
     - Features: ${String(data.features.length)}
     - Fixes: ${String(data.fixes.length)}
     - Breaking changes: ${String(data.breaking.length)}`);
+    const hasCustomTemplate = template && template.trim() !== '';
+    if (!hasCustomTemplate) {
+        const releaseNotes = renderReleaseNotes(DEFAULT_TEMPLATE, data);
+        info('Release notes compiled successfully');
+        return releaseNotes;
+    }
     try {
-        // Use default template if no template provided or if template is empty/whitespace
-        const templateToUse = template && template.trim() !== '' ? template : DEFAULT_TEMPLATE;
-        const compiledTemplate = handlebars_lib_default().compile(templateToUse);
-        const releaseNotes = compiledTemplate(data);
+        const releaseNotes = renderReleaseNotes(template, data);
         info('Release notes compiled successfully');
         return releaseNotes;
     }
     catch (err) {
-        error(`Failed to compile release notes: ${err instanceof Error ? err.message : String(err)}`);
-        throw err;
+        warning(`Invalid custom release notes template provided: ${err instanceof Error ? err.message : String(err)}. Falling back to default template.`);
+        try {
+            const releaseNotes = renderReleaseNotes(DEFAULT_TEMPLATE, data);
+            info('Release notes compiled successfully with fallback default template');
+            return releaseNotes;
+        }
+        catch (fallbackError) {
+            error(`Failed to compile release notes with fallback template: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`);
+            throw fallbackError;
+        }
     }
 };
 
