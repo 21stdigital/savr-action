@@ -35,17 +35,16 @@ export const getTags = async (context: GitHubContext): Promise<Tag[]> => {
         page
       })
 
-      if (tags.length === 0) {
-        debug('No more tags found')
-        hasMore = false
-      } else {
-        debug(`Found ${String(tags.length)} tags on page ${String(page)}`)
-        allTags.push(
-          ...tags.map(tag => ({
-            name: tag.name,
-            version: tag.name
-          }))
-        )
+      debug(`Found ${String(tags.length)} tags on page ${String(page)}`)
+      allTags.push(
+        ...tags.map(tag => ({
+          name: tag.name,
+          version: tag.name
+        }))
+      )
+
+      hasMore = tags.length === 100
+      if (hasMore) {
         page++
       }
     }
@@ -76,23 +75,21 @@ export const getCommits = async (context: GitHubContext, head: string, sinceTag?
         page
       })
 
-      if (pageCommits.length === 0) {
-        debug('No more commits found')
+      debug(`Found ${String(pageCommits.length)} commits on page ${String(page)}`)
+      // If we have a sinceTag, stop when we reach it
+      if (sinceTag && pageCommits.some(commit => commit.sha === sinceTag)) {
+        info(`Reached target tag ${sinceTag}, stopping commit fetch`)
+        // Only include commits up to but not including the tag's commit
+        const commitsUpToTag = pageCommits.slice(
+          0,
+          pageCommits.findIndex(commit => commit.sha === sinceTag)
+        )
+        commits.push(...commitsUpToTag.map(commit => parseCommit(commit.commit.message)))
         hasMore = false
       } else {
-        debug(`Found ${String(pageCommits.length)} commits on page ${String(page)}`)
-        // If we have a sinceTag, stop when we reach it
-        if (sinceTag && pageCommits.some(commit => commit.sha === sinceTag)) {
-          info(`Reached target tag ${sinceTag}, stopping commit fetch`)
-          hasMore = false
-          // Only include commits up to but not including the tag's commit
-          const commitsUpToTag = pageCommits.slice(
-            0,
-            pageCommits.findIndex(commit => commit.sha === sinceTag)
-          )
-          commits.push(...commitsUpToTag.map(commit => parseCommit(commit.commit.message)))
-        } else {
-          commits.push(...pageCommits.map(commit => parseCommit(commit.commit.message)))
+        commits.push(...pageCommits.map(commit => parseCommit(commit.commit.message)))
+        hasMore = pageCommits.length === 100
+        if (hasMore) {
           page++
         }
       }
