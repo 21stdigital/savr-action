@@ -59,6 +59,7 @@ describe('main', () => {
   describe('run', () => {
     it('should create initial release when no tags exist', async () => {
       ;(getTags as Mock).mockResolvedValue([])
+      mockOctokit.rest.git.getRef.mockResolvedValue({ data: { object: { sha: 'head-sha' } } })
       ;(getCommits as Mock).mockResolvedValue([
         { type: 'feat', subject: 'new feature', message: 'feat: new feature', breaking: false }
       ])
@@ -76,6 +77,12 @@ describe('main', () => {
 
       await run()
 
+      expect(mockOctokit.rest.git.getRef).toHaveBeenCalledWith({ owner: 'owner', repo: 'repo', ref: 'heads/main' })
+      expect(getCommits).toHaveBeenCalledWith(
+        { owner: 'owner', repo: 'repo', octokit: mockOctokit },
+        'head-sha',
+        undefined
+      )
       expect(createOrUpdateRelease).toHaveBeenCalledWith(
         { owner: 'owner', repo: 'repo', octokit: mockOctokit },
         'v0.1.0',
@@ -133,6 +140,7 @@ describe('main', () => {
     it('should handle dry run mode', async () => {
       ;(getBooleanInput as Mock).mockReturnValue(true)
       ;(getTags as Mock).mockResolvedValue([])
+      mockOctokit.rest.git.getRef.mockResolvedValue({ data: { object: { sha: 'head-sha' } } })
       ;(getCommits as Mock).mockResolvedValue([
         { type: 'feat', subject: 'new feature', message: 'feat: new feature', breaking: false }
       ])
