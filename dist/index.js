@@ -47199,6 +47199,7 @@ const determineVersionBump = (categorizedCommits) => {
 ;// CONCATENATED MODULE: ./src/github/index.ts
 
 
+const SAVR_MARKER = '<!-- savr-managed-release -->';
 const getTags = async (context) => {
     core_debug(`Fetching tags for repository ${context.owner}/${context.repo}`);
     const allTags = [];
@@ -47322,7 +47323,7 @@ const createOrUpdateRelease = async (context, tagName, releaseName, releaseNotes
             repo: context.repo,
             tag_name: tagName,
             name: releaseName,
-            body: releaseNotes,
+            body: `${releaseNotes}\n${SAVR_MARKER}`,
             draft,
             ...(targetCommitish ? { target_commitish: targetCommitish } : {})
         };
@@ -47341,7 +47342,7 @@ const createOrUpdateRelease = async (context, tagName, releaseName, releaseNotes
             release = data;
         }
         // Clean up other draft releases (keep only the current one)
-        const otherDrafts = releases.filter(({ draft, tag_name, id }) => draft && tag_name !== tagName && id !== release.id);
+        const otherDrafts = releases.filter(({ draft, tag_name, id, body }) => draft && tag_name !== tagName && id !== release.id && body?.includes(SAVR_MARKER));
         if (otherDrafts.length > 0) {
             info(`Found ${String(otherDrafts.length)} old draft release(s) to delete`);
             for (const oldDraft of otherDrafts) {
