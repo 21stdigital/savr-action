@@ -35,6 +35,17 @@ describe('commits', () => {
       })
     })
 
+    it('should detect breaking changes when ! appears after scope', () => {
+      const commit = parseCommit('feat(api)!: breaking change')
+      expect(commit).toEqual({
+        type: 'feat',
+        scope: 'api',
+        subject: 'breaking change',
+        message: 'feat(api)!: breaking change',
+        breaking: true
+      })
+    })
+
     it('should handle non-conventional commit messages', () => {
       const commit = parseCommit('random commit message')
       expect(commit).toEqual({

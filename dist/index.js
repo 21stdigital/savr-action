@@ -47136,7 +47136,7 @@ const COMMIT_TYPES = [
     'revert',
     'build'
 ];
-const COMMIT_REGEX = new RegExp(`^(${COMMIT_TYPES.join('|')})(!?)(?:\\(([^)]+)\\))?: (.+)`);
+const COMMIT_REGEX = new RegExp(`^(${COMMIT_TYPES.join('|')})(?:\\(([^)]+)\\))?(!?):\\s*(.+)`);
 const parseCommit = (message) => {
     // Sanitize commit message to prevent workflow command injection in debug logs
     core_debug(`Parsing commit message: ${sanitizeLogOutput(message)}`);
@@ -47152,7 +47152,7 @@ const parseCommit = (message) => {
             breaking: false
         };
     }
-    const [, type, isBreaking, scope, subject] = match;
+    const [, type, scope, isBreaking, subject] = match;
     const breaking = isBreaking === '!' || message.includes('BREAKING CHANGE:');
     core_debug(`Parsed commit - Type: ${type}, Scope: ${scope || 'none'}, Breaking: ${String(breaking)}`);
     return {

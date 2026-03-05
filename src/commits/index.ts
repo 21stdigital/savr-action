@@ -30,7 +30,7 @@ const COMMIT_TYPES = [
   'revert',
   'build'
 ] as const
-const COMMIT_REGEX = new RegExp(`^(${COMMIT_TYPES.join('|')})(!?)(?:\\(([^)]+)\\))?: (.+)`)
+const COMMIT_REGEX = new RegExp(`^(${COMMIT_TYPES.join('|')})(?:\\(([^)]+)\\))?(!?):\\s*(.+)`)
 
 export const parseCommit = (message: string): Commit => {
   // Sanitize commit message to prevent workflow command injection in debug logs
@@ -49,7 +49,7 @@ export const parseCommit = (message: string): Commit => {
     }
   }
 
-  const [, type, isBreaking, scope, subject] = match
+  const [, type, scope, isBreaking, subject] = match
   const breaking = isBreaking === '!' || message.includes('BREAKING CHANGE:')
 
   debug(`Parsed commit - Type: ${type}, Scope: ${scope || 'none'}, Breaking: ${String(breaking)}`)
