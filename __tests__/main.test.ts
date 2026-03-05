@@ -84,7 +84,8 @@ describe('main', () => {
       )
       expect(setOutput).toHaveBeenCalledWith('release-url', 'https://github.com/owner/repo/releases/tag/v0.1.0')
       expect(setOutput).toHaveBeenCalledWith('release-id', '123')
-      expect(setOutput).toHaveBeenCalledWith('version', 'v0.1.0')
+      expect(setOutput).toHaveBeenCalledWith('version', '0.1.0')
+      expect(setOutput).toHaveBeenCalledWith('tag', 'v0.1.0')
     })
 
     it('should update release when tags exist', async () => {
@@ -125,7 +126,8 @@ describe('main', () => {
       )
       expect(setOutput).toHaveBeenCalledWith('release-url', 'https://github.com/owner/repo/releases/tag/v1.1.0')
       expect(setOutput).toHaveBeenCalledWith('release-id', '123')
-      expect(setOutput).toHaveBeenCalledWith('version', 'v1.1.0')
+      expect(setOutput).toHaveBeenCalledWith('version', '1.1.0')
+      expect(setOutput).toHaveBeenCalledWith('tag', 'v1.1.0')
     })
 
     it('should handle dry run mode', async () => {

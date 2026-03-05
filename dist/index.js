@@ -47568,7 +47568,8 @@ const run = async () => {
         const release = await createOrUpdateRelease(githubContext, tagName, releaseName, releaseNotes);
         setOutput('release-url', release.url);
         setOutput('release-id', release.id.toString());
-        setOutput('version', release.tagName);
+        setOutput('version', initialVersion);
+        setOutput('tag', release.tagName);
         return;
     }
     const { data: tagData } = await octokit.rest.git.getRef({ owner, repo, ref: `tags/${latestTag.name}` });
@@ -47621,7 +47622,8 @@ const run = async () => {
     const release = await createOrUpdateRelease(githubContext, tagName, releaseName, releaseNotes, headData.object.sha);
     setOutput('release-url', release.url);
     setOutput('release-id', release.id.toString());
-    setOutput('version', release.tagName);
+    setOutput('version', newVersion);
+    setOutput('tag', release.tagName);
 };
 
 ;// CONCATENATED MODULE: ./src/index.ts
