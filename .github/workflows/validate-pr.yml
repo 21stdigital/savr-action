@@ -8,6 +8,9 @@ on:
       - synchronize
       - reopened
 
+permissions:
+  contents: read
+
 jobs:
   workflows:
     uses: 21stdigital/workflows/.github/workflows/validate-pr.yml@main

@@ -5,6 +5,10 @@ on:
     - cron: '34 5 * * *'
   workflow_dispatch:
 
+permissions:
+  issues: write
+  labels: write
+
 jobs:
   workflows:
     uses: 21stdigital/workflows/.github/workflows/labels.yaml@main
