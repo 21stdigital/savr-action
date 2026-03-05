@@ -69,6 +69,8 @@ inputs:
 outputs:
   version:
     description: The calculated version for the release
+  tag:
+    description: The full tag name including prefix
   release-url:
     description: The URL of the created or updated draft release
   release-id:

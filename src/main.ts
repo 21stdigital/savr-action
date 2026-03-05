@@ -67,7 +67,8 @@ export const run = async (): Promise<void> => {
     const release = await createOrUpdateRelease(githubContext, tagName, releaseName, releaseNotes)
     setOutput('release-url', release.url)
     setOutput('release-id', release.id.toString())
-    setOutput('version', release.tagName)
+    setOutput('version', initialVersion)
+    setOutput('tag', release.tagName)
     return
   }
 
@@ -136,5 +137,6 @@ export const run = async (): Promise<void> => {
 
   setOutput('release-url', release.url)
   setOutput('release-id', release.id.toString())
-  setOutput('version', release.tagName)
+  setOutput('version', newVersion)
+  setOutput('tag', release.tagName)
 }
