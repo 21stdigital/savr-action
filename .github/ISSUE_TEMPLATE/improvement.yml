@@ -1,0 +1,40 @@
+name: Improvement
+description: Suggest a code quality, refactoring, performance, or technical debt improvement
+labels: ['improvement']
+body:
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which module is affected?
+      options:
+        - commits
+        - version
+        - github
+        - templates
+        - utils
+        - config
+        - other
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What should be improved and why?
+    validations:
+      required: true
+  - type: textarea
+    id: current-behavior
+    attributes:
+      label: Current behavior
+      description: How does it work now?
+  - type: textarea
+    id: suggested-change
+    attributes:
+      label: Suggested change
+      description: Concrete proposal for the improvement.
+    validations:
+      required: true
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context

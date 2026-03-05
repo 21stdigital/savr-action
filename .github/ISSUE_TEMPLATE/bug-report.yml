@@ -1,0 +1,52 @@
+name: Bug Report
+description: Report a bug with SAVR
+labels: ['bug']
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What's wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: steps-to-reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: How to trigger the bug.
+    validations:
+      required: true
+  - type: textarea
+    id: expected-behavior
+    attributes:
+      label: Expected Behavior
+      description: What should happen instead?
+    validations:
+      required: true
+  - type: input
+    id: action-version
+    attributes:
+      label: Action Version
+      description: Version of SAVR being used.
+      placeholder: e.g. 1.2.0
+    validations:
+      required: true
+  - type: dropdown
+    id: runner-environment
+    attributes:
+      label: Runner Environment
+      options:
+        - ubuntu-latest
+        - macos-latest
+        - windows-latest
+        - other
+  - type: textarea
+    id: workflow-config
+    attributes:
+      label: Relevant workflow config
+      description: The workflow YAML or config snippet, if applicable.
+      render: yaml
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
