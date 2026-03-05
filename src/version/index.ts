@@ -1,5 +1,5 @@
 import { debug, info, warning } from '@actions/core'
-import { rcompare, valid } from 'semver'
+import { inc, rcompare, valid } from 'semver'
 
 export type VersionType = 'major' | 'minor' | 'patch'
 
@@ -10,27 +10,12 @@ export interface Tag {
 
 export const incrementVersion = (version: string, type: VersionType): string => {
   debug(`Incrementing version ${version} by ${type}`)
-
-  // Split version into base version and metadata
-  const [baseVersion, ...metadata] = version.split('+')
-  const [versionWithoutPreRelease] = baseVersion.split('-')
-
-  // Parse the base version numbers
-  const [major, minor, patch] = versionWithoutPreRelease.split('.').map(Number)
-
-  // Calculate new version numbers based on type
-  const increments = {
-    major: [major + 1, 0, 0],
-    minor: [major, minor + 1, 0],
-    patch: [major, minor, patch + 1]
+  const result = inc(version, type)
+  if (result == null) {
+    throw new Error(`Failed to increment version "${version}" by "${type}"`)
   }
-
-  // Construct new version
-  const newBaseVersion = increments[type].join('.')
-  const newVersion = metadata.length > 0 ? `${newBaseVersion}+${metadata.join('+')}` : newBaseVersion
-
-  info(`New version calculated: ${newVersion}`)
-  return newVersion
+  info(`New version calculated: ${result}`)
+  return result
 }
 
 export const getLatestVersion = (tags: Tag[], tagPrefix: string): Tag | undefined => {

@@ -47086,6 +47086,8 @@ function getOctokit(token, options, ...additionalPlugins) {
     return new GitHubWithPlugins(getOctokitOptions(token, options));
 }
 //# sourceMappingURL=github.js.map
+// EXTERNAL MODULE: ./node_modules/.pnpm/semver@7.7.4/node_modules/semver/index.js
+var semver = __nccwpck_require__(9419);
 ;// CONCATENATED MODULE: ./src/utils/index.ts
 /**
  * Utility functions for safe logging and string handling
@@ -47475,29 +47477,17 @@ const compileReleaseNotes = (template, data) => {
     }
 };
 
-// EXTERNAL MODULE: ./node_modules/.pnpm/semver@7.7.4/node_modules/semver/index.js
-var semver = __nccwpck_require__(9419);
 ;// CONCATENATED MODULE: ./src/version/index.ts
 
 
 const incrementVersion = (version, type) => {
     core_debug(`Incrementing version ${version} by ${type}`);
-    // Split version into base version and metadata
-    const [baseVersion, ...metadata] = version.split('+');
-    const [versionWithoutPreRelease] = baseVersion.split('-');
-    // Parse the base version numbers
-    const [major, minor, patch] = versionWithoutPreRelease.split('.').map(Number);
-    // Calculate new version numbers based on type
-    const increments = {
-        major: [major + 1, 0, 0],
-        minor: [major, minor + 1, 0],
-        patch: [major, minor, patch + 1]
-    };
-    // Construct new version
-    const newBaseVersion = increments[type].join('.');
-    const newVersion = metadata.length > 0 ? `${newBaseVersion}+${metadata.join('+')}` : newBaseVersion;
-    info(`New version calculated: ${newVersion}`);
-    return newVersion;
+    const result = (0,semver.inc)(version, type);
+    if (result == null) {
+        throw new Error(`Failed to increment version "${version}" by "${type}"`);
+    }
+    info(`New version calculated: ${result}`);
+    return result;
 };
 const getLatestVersion = (tags, tagPrefix) => {
     core_debug(`Finding latest version from ${String(tags.length)} tags with prefix "${tagPrefix}"`);
@@ -47531,6 +47521,7 @@ const getLatestVersion = (tags, tagPrefix) => {
 
 
 
+
 const processCommits = async (githubContext, head, sinceTag) => {
     const commits = await getCommits(githubContext, head, sinceTag);
     info('Retrieved commits:');
@@ -47552,6 +47543,9 @@ const run = async () => {
     const releaseNotesTemplate = getInput('release-notes-template');
     const dryRun = getBooleanInput('dry-run');
     const initialVersion = getInput('initial-version');
+    if (!(0,semver.valid)(initialVersion)) {
+        throw new Error(`Invalid initial version: "${initialVersion}". Must be a valid semver string (e.g., 1.0.0)`);
+    }
     const octokit = getOctokit(token);
     const { owner, repo } = github_context.repo;
     if (!owner || !repo) {

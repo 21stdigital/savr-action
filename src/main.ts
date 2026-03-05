@@ -1,5 +1,6 @@
 import { getBooleanInput, getInput, info, setOutput } from '@actions/core'
 import { context, getOctokit } from '@actions/github'
+import { valid } from 'semver'
 
 import { categorizeCommits, determineVersionBump } from './commits/index.js'
 import { createOrUpdateRelease, getCommits, getTags, type GitHubContext } from './github/index.js'
@@ -31,6 +32,9 @@ export const run = async (): Promise<void> => {
   const releaseNotesTemplate = getInput('release-notes-template')
   const dryRun = getBooleanInput('dry-run')
   const initialVersion = getInput('initial-version')
+  if (!valid(initialVersion)) {
+    throw new Error(`Invalid initial version: "${initialVersion}". Must be a valid semver string (e.g., 1.0.0)`)
+  }
 
   const octokit = getOctokit(token)
   const { owner, repo } = context.repo
