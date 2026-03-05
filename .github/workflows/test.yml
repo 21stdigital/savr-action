@@ -4,7 +4,7 @@ on:
   pull_request:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
@@ -13,6 +13,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -42,12 +44,18 @@ jobs:
         run: pnpm build
 
       - name: Check dist/ is up to date
+        id: dist-check
         run: |
-          if [ -n "$(git diff --name-only)" ]; then
-            echo "::error::dist/ is out of date. Run 'pnpm build' and commit the changes."
-            git diff --name-only
-            exit 1
+          if [ -n "$(git diff --name-only dist/)" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
           fi
+
+      - name: Commit updated dist/
+        if: steps.dist-check.outputs.changed == 'true'
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: 'chore: rebuild dist/'
+          file_pattern: 'dist/*'
 
       - name: Run tests
         run: pnpm test
