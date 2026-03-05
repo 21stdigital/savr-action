@@ -67,6 +67,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -76,37 +79,48 @@ jobs:
           fetch-depth: 0
 
       - name: Create Release Draft
-        uses: 21stdigital/savr-action@v1.0.1
+        uses: 21stdigital/savr-action@v1
         with:
-          github-token: ${{ secrets.PAT_TOKEN }} # Personal Access Token with repo scope
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           # Optional configuration:
           # tag-prefix: 'v'
           # dry-run: false
           # release-notes-template: |
           #   ## Release {{version}}
-          #   {{#each commits}}
-          #   - {{this.message}} ({{this.type}})
+          #   {{#if features}}
+          #   ### Features
+          #   {{#each features}}
+          #   - {{this.subject}}
           #   {{/each}}
+          #   {{/if}}
 ```
 
 ## Inputs
 
-| Input                    | Description                                                                                                                                                 | Required | Default          |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- | ---------------- |
-| `github-token`           | Personal Access Token (PAT) with `repo` scope for GitHub API authentication. The default `GITHUB_TOKEN` has insufficient permissions for creating releases. | Yes      | -                |
-| `tag-prefix`             | The prefix for version tags                                                                                                                                 | No       | `v`              |
-| `release-branch`         | The branch to use for the release                                                                                                                           | No       | `main`           |
-| `dry-run`                | Simulate the process without creating releases                                                                                                              | No       | `false`          |
-| `release-notes-template` | Template for release notes formatting                                                                                                                       | No       | Default template |
-| `initial-version`        | The initial version to start from                                                                                                                           | No       | `1.0.0`          |
+| Input                    | Description                                                                                                            | Required | Default          |
+| ------------------------ | ---------------------------------------------------------------------------------------------------------------------- | -------- | ---------------- |
+| `github-token`           | GitHub token for API authentication. Use `GITHUB_TOKEN` with `contents: write` permission, or a PAT with `repo` scope. | Yes      | -                |
+| `tag-prefix`             | The prefix for version tags                                                                                            | No       | `v`              |
+| `release-branch`         | The branch to use for the release                                                                                      | No       | `main`           |
+| `dry-run`                | Simulate the process without creating releases                                                                         | No       | `false`          |
+| `release-notes-template` | Template for release notes formatting                                                                                  | No       | Default template |
+| `initial-version`        | The initial version to start from                                                                                      | No       | `1.0.0`          |
 
 ## Outputs
 
-| Output        | Description                                  |
-| ------------- | -------------------------------------------- |
-| `version`     | The calculated version for the release       |
-| `release-url` | The URL of the created/updated draft release |
-| `release-id`  | The ID of the created/updated draft release  |
+| Output        | Description                                                                      |
+| ------------- | -------------------------------------------------------------------------------- |
+| `version`     | The full tag name for the release (e.g., `v1.2.3` when using default `v` prefix) |
+| `release-url` | The URL of the created/updated draft release                                     |
+| `release-id`  | The ID of the created/updated draft release                                      |
+
+> **Note:** Outputs are only set when a release is actually created or updated. They will be empty in dry-run mode, when HEAD matches the latest tag, or when no version bump is needed (e.g., only `chore`/`docs` commits).
+
+## How It Works
+
+- On every push, SAVR calculates the next semantic version based on commits since the last tag
+- It creates or updates a single draft release with the generated release notes
+- **Important:** When a new draft release is created, all previous draft releases are automatically deleted. Only the latest draft release is kept
 
 ## Version Bump Rules
 
@@ -121,38 +135,75 @@ The action follows these rules to determine version bumps:
 
 Release notes are automatically generated and include:
 
-- ✨ Features
-- 🐛 Bug fixes
-- 💥 Breaking changes
-- Contributors list
+- Features
+- Bug fixes
+- Breaking changes
 
-The default template format is:
+The default template groups commits by scope using a built-in `groupByScope` Handlebars helper:
 
 ```handlebars
 {{#if features}}
-  ### ✨ Features
-  {{#each features}}
-    -
-    {{this.message}}
+  ### Features
+  {{#each (groupByScope features)}}
+    ####
+    {{this.scope}}
+    {{#each this.commits}}
+      -
+      {{this.subject}}
+    {{/each}}
+
   {{/each}}
 {{/if}}
 
 {{#if fixes}}
-  ### 🐛 Fixes
-  {{#each fixes}}
-    -
-    {{this.message}}
+  ### Fixes
+  {{#each (groupByScope fixes)}}
+    ####
+    {{this.scope}}
+    {{#each this.commits}}
+      -
+      {{this.subject}}
+    {{/each}}
+
   {{/each}}
 {{/if}}
 
 {{#if breaking}}
-  ### 💥 Breaking Changes
-  {{#each breaking}}
-    -
-    {{this.message}}
+  ### Breaking Changes
+  {{#each (groupByScope breaking)}}
+    ####
+    {{this.scope}}
+    {{#each this.commits}}
+      -
+      {{this.subject}}
+    {{/each}}
+
   {{/each}}
 {{/if}}
 ```
+
+### Custom Templates
+
+You can provide your own Handlebars template via the `release-notes-template` input. The following data is available:
+
+| Variable   | Type       | Description                   |
+| ---------- | ---------- | ----------------------------- |
+| `version`  | `string`   | The new version string        |
+| `features` | `Commit[]` | Feature commits (`feat` type) |
+| `fixes`    | `Commit[]` | Fix commits (`fix` type)      |
+| `breaking` | `Commit[]` | Breaking change commits       |
+
+Each `Commit` object has:
+
+| Property     | Type                  | Description                                 |
+| ------------ | --------------------- | ------------------------------------------- |
+| `subject`    | `string`              | The commit subject line                     |
+| `scope`      | `string \| undefined` | The commit scope (e.g., `feat(scope): ...`) |
+| `type`       | `string`              | The commit type (`feat`, `fix`, etc.)       |
+| `message`    | `string`              | The full original commit message            |
+| `isBreaking` | `boolean`             | Whether this is a breaking change           |
+
+The `groupByScope` helper groups an array of commits by their scope, returning objects with `{ scope, commits }`. Scopes without a value are grouped under "General".
 
 ## Contributing
 
