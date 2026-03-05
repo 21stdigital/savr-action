@@ -35,6 +35,8 @@ Requires a `.env` file with GitHub token and repository context variables.
 
 ```bash
 pnpm prepare       # Setup Husky git hooks
+pnpm eslint .      # Run ESLint (no dedicated lint script)
+pnpm prettier --check .  # Check formatting
 ```
 
 The project uses:
@@ -42,7 +44,7 @@ The project uses:
 - Husky for git hooks (commit-msg validation, pre-commit linting)
 - lint-staged for pre-commit formatting
 - commitlint to enforce Conventional Commits
-- ESLint with import sorting plugins
+- ESLint (v10) with strict TypeScript checking, import sorting, and **arrow functions enforced** (`prefer-arrow-functions` plugin)
 - Prettier for code formatting
 
 ## Architecture
@@ -99,7 +101,7 @@ Uses Handlebars for release note generation:
 
 #### action.yml
 
-Defines GitHub Action interface with inputs (github-token, tag-prefix, release-branch, dry-run, release-notes-template, initial-version) and outputs (version, release-url, release-id).
+Defines GitHub Action interface with inputs (github-token, tag-prefix, release-branch, dry-run, release-notes-template, initial-version) and outputs (version, tag, release-url, release-id). Runs on Node 24.
 
 #### TypeScript Configuration
 
