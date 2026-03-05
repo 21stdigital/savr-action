@@ -88,8 +88,8 @@ Interfaces with GitHub API via Octokit:
 Uses Handlebars for release note generation:
 
 - `compileReleaseNotes()` - Compiles template with version and categorized commits
-- Default template organizes by Features, Fixes, and Breaking Changes sections
-- Registers `groupByScope` helper for Handlebars templates
+- Two default templates exist: `action.yml` defines one with conditional rendering and emoji headers (used when user provides no override), and `src/templates/index.ts` has a hardcoded `DEFAULT_TEMPLATE` fallback (no conditionals, no emoji) used when the input is empty/whitespace
+- Registers `groupByScope` helper that groups commits by scope, converting scope names to title case and sorting "General" (no scope) last
 
 #### Utils Module (`src/utils/index.ts`)
 
@@ -99,7 +99,7 @@ Uses Handlebars for release note generation:
 
 #### action.yml
 
-Defines GitHub Action interface with inputs (github-token, tag-prefix, release-branch, commit-regex, dry-run, release-notes-template, bump-rules, initial-version) and outputs (version, release-url, release-id).
+Defines GitHub Action interface with inputs (github-token, tag-prefix, release-branch, dry-run, release-notes-template, initial-version) and outputs (version, release-url, release-id).
 
 #### TypeScript Configuration
 
@@ -123,6 +123,7 @@ Breaking changes are detected by:
 - Only creates/updates release if version bump is needed (skips if only chore/docs commits)
 - Always creates draft releases (never published automatically)
 - Reuses existing draft release for same tag name
+- Automatically deletes all other draft releases when creating/updating (keeps only the current one)
 
 ### Dry-run Mode
 
