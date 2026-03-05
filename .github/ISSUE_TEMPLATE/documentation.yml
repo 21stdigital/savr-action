@@ -1,0 +1,29 @@
+name: Documentation
+description: Report a documentation issue or suggest an improvement
+labels: ['documentation']
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: What documentation needs attention?
+    validations:
+      required: true
+  - type: textarea
+    id: current-state
+    attributes:
+      label: Current state
+      description: What does the documentation currently say (or lack)?
+    validations:
+      required: true
+  - type: textarea
+    id: suggested-change
+    attributes:
+      label: Suggested change
+      description: What should the documentation say instead?
+    validations:
+      required: true
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: Additional context
