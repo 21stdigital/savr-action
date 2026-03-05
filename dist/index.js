@@ -47290,7 +47290,7 @@ const deleteRelease = async (context, releaseId) => {
         throw err;
     }
 };
-const createOrUpdateRelease = async (context, tagName, releaseName, releaseNotes, draft = true) => {
+const createOrUpdateRelease = async (context, tagName, releaseName, releaseNotes, targetCommitish, draft = true) => {
     core_debug(`Checking for existing draft release with tag ${tagName}`);
     try {
         const { data: releases } = await context.octokit.rest.repos.listReleases({
@@ -47304,7 +47304,8 @@ const createOrUpdateRelease = async (context, tagName, releaseName, releaseNotes
             tag_name: tagName,
             name: releaseName,
             body: releaseNotes,
-            draft
+            draft,
+            ...(targetCommitish ? { target_commitish: targetCommitish } : {})
         };
         let release;
         if (existingDraft) {
@@ -47587,7 +47588,7 @@ const run = async () => {
     }
     const tagName = `${tagPrefix}${newVersion}`;
     const releaseName = newVersion;
-    const release = await createOrUpdateRelease(githubContext, tagName, releaseName, releaseNotes);
+    const release = await createOrUpdateRelease(githubContext, tagName, releaseName, releaseNotes, headData.object.sha);
     setOutput('release-url', release.url);
     setOutput('release-id', release.id.toString());
     setOutput('version', release.tagName);
