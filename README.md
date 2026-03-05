@@ -101,18 +101,19 @@ jobs:
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------- | -------- | ---------------- |
 | `github-token`           | GitHub token for API authentication. Use `GITHUB_TOKEN` with `contents: write` permission, or a PAT with `repo` scope. | Yes      | -                |
 | `tag-prefix`             | The prefix for version tags                                                                                            | No       | `v`              |
-| `release-branch`         | The branch to use for the release                                                                                      | No       | `main`           |
+| `release-branch`         | The branch to monitor for new commits                                                                                  | No       | `main`           |
 | `dry-run`                | Simulate the process without creating releases                                                                         | No       | `false`          |
 | `release-notes-template` | Template for release notes formatting                                                                                  | No       | Default template |
 | `initial-version`        | The initial version to start from                                                                                      | No       | `1.0.0`          |
 
 ## Outputs
 
-| Output        | Description                                                                      |
-| ------------- | -------------------------------------------------------------------------------- |
-| `version`     | The full tag name for the release (e.g., `v1.2.3` when using default `v` prefix) |
-| `release-url` | The URL of the created/updated draft release                                     |
-| `release-id`  | The ID of the created/updated draft release                                      |
+| Output        | Description                                         |
+| ------------- | --------------------------------------------------- |
+| `version`     | The calculated version number (e.g., `1.2.3`)       |
+| `tag`         | The full tag name including prefix (e.g., `v1.2.3`) |
+| `release-url` | The URL of the created/updated draft release        |
+| `release-id`  | The ID of the created/updated draft release         |
 
 > **Note:** Outputs are only set when a release is actually created or updated. They will be empty in dry-run mode, when HEAD matches the latest tag, or when no version bump is needed (e.g., only `chore`/`docs` commits).
 
@@ -120,7 +121,7 @@ jobs:
 
 - On every push, SAVR calculates the next semantic version based on commits since the last tag
 - It creates or updates a single draft release with the generated release notes
-- **Important:** When a new draft release is created, all previous draft releases are automatically deleted. Only the latest draft release is kept
+- **Important:** When a new draft release is created, all previous SAVR-managed draft releases are automatically deleted. Only the latest draft release is kept. Manually created draft releases are not affected
 
 ## Version Bump Rules
 
@@ -143,7 +144,7 @@ The default template groups commits by scope using a built-in `groupByScope` Han
 
 ```handlebars
 {{#if features}}
-  ### Features
+  ### ✨ Features
   {{#each (groupByScope features)}}
     ####
     {{this.scope}}
@@ -156,7 +157,7 @@ The default template groups commits by scope using a built-in `groupByScope` Han
 {{/if}}
 
 {{#if fixes}}
-  ### Fixes
+  ### 🐛 Fixes
   {{#each (groupByScope fixes)}}
     ####
     {{this.scope}}
@@ -169,7 +170,7 @@ The default template groups commits by scope using a built-in `groupByScope` Han
 {{/if}}
 
 {{#if breaking}}
-  ### Breaking Changes
+  ### 💥 Breaking Changes
   {{#each (groupByScope breaking)}}
     ####
     {{this.scope}}
@@ -195,13 +196,13 @@ You can provide your own Handlebars template via the `release-notes-template` in
 
 Each `Commit` object has:
 
-| Property     | Type                  | Description                                 |
-| ------------ | --------------------- | ------------------------------------------- |
-| `subject`    | `string`              | The commit subject line                     |
-| `scope`      | `string \| undefined` | The commit scope (e.g., `feat(scope): ...`) |
-| `type`       | `string`              | The commit type (`feat`, `fix`, etc.)       |
-| `message`    | `string`              | The full original commit message            |
-| `isBreaking` | `boolean`             | Whether this is a breaking change           |
+| Property   | Type                  | Description                                 |
+| ---------- | --------------------- | ------------------------------------------- |
+| `subject`  | `string`              | The commit subject line                     |
+| `scope`    | `string \| undefined` | The commit scope (e.g., `feat(scope): ...`) |
+| `type`     | `string`              | The commit type (`feat`, `fix`, etc.)       |
+| `message`  | `string`              | The full original commit message            |
+| `breaking` | `boolean`             | Whether this is a breaking change           |
 
 The `groupByScope` helper groups an array of commits by their scope, returning objects with `{ scope, commits }`. Scopes without a value are grouped under "General".
 
