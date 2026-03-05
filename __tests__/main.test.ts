@@ -120,7 +120,8 @@ describe('main', () => {
         { owner: 'owner', repo: 'repo', octokit: mockOctokit },
         'v1.1.0',
         '1.1.0',
-        'Release notes'
+        'Release notes',
+        'head-sha'
       )
       expect(setOutput).toHaveBeenCalledWith('release-url', 'https://github.com/owner/repo/releases/tag/v1.1.0')
       expect(setOutput).toHaveBeenCalledWith('release-id', '123')
@@ -208,7 +209,13 @@ describe('main', () => {
         'head-sha',
         'tag-commit-sha'
       )
-      expect(createOrUpdateRelease).toHaveBeenCalled()
+      expect(createOrUpdateRelease).toHaveBeenCalledWith(
+        { owner: 'owner', repo: 'repo', octokit: mockOctokit },
+        'v1.1.0',
+        '1.1.0',
+        'Release notes',
+        'head-sha'
+      )
     })
 
     it('should skip release when HEAD matches dereferenced annotated tag commit', async () => {
