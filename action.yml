@@ -67,6 +67,8 @@ inputs:
 
 # Define your outputs here.
 outputs:
+  skipped:
+    description: Indicates whether release creation/update was skipped
   version:
     description: The calculated version for the release
   tag:

@@ -58,6 +58,19 @@ export const run = async (): Promise<void> => {
   }
 
   const githubContext = { owner, repo, octokit }
+  const setReleaseOutputs = (outputs: {
+    skipped: boolean
+    version: string
+    tag: string
+    releaseUrl?: string
+    releaseId?: string
+  }) => {
+    setOutput('skipped', outputs.skipped.toString())
+    setOutput('release-url', outputs.releaseUrl ?? '')
+    setOutput('release-id', outputs.releaseId ?? '')
+    setOutput('version', outputs.version)
+    setOutput('tag', outputs.tag)
+  }
 
   const tags = await getTags(githubContext)
   const latestTag = getLatestVersion(tags, tagPrefix)
@@ -80,14 +93,22 @@ export const run = async (): Promise<void> => {
       info('Release notes:')
       // Sanitize release notes to prevent workflow command injection
       info(sanitizeLogOutput(releaseNotes))
+      setReleaseOutputs({
+        skipped: true,
+        version: initialVersion,
+        tag: tagName
+      })
       return
     }
 
     const release = await createOrUpdateRelease(githubContext, tagName, releaseName, releaseNotes)
-    setOutput('release-url', release.url)
-    setOutput('release-id', release.id.toString())
-    setOutput('version', initialVersion)
-    setOutput('tag', release.tagName)
+    setReleaseOutputs({
+      skipped: false,
+      releaseUrl: release.url,
+      releaseId: release.id.toString(),
+      version: initialVersion,
+      tag: release.tagName
+    })
     return
   }
 
@@ -120,6 +141,11 @@ export const run = async (): Promise<void> => {
   // If HEAD and tag point to the same commit, there are no new commits to process
   if (headData.object.sha === latestTagCommitSha) {
     info('HEAD and latest tag point to the same commit - no changes to release')
+    setReleaseOutputs({
+      skipped: true,
+      version: latestTag.version,
+      tag: latestTag.name
+    })
     return
   }
 
@@ -130,6 +156,11 @@ export const run = async (): Promise<void> => {
 
   if (versionBump == null) {
     info('No version bump needed - skipping release creation')
+    setReleaseOutputs({
+      skipped: true,
+      version: latestTag.version,
+      tag: latestTag.name
+    })
     return
   }
 
@@ -146,6 +177,11 @@ export const run = async (): Promise<void> => {
     info('Release notes:')
     // Sanitize release notes to prevent workflow command injection
     info(sanitizeLogOutput(releaseNotes))
+    setReleaseOutputs({
+      skipped: true,
+      version: newVersion,
+      tag: `${tagPrefix}${newVersion}`
+    })
     return
   }
 
@@ -154,8 +190,11 @@ export const run = async (): Promise<void> => {
 
   const release = await createOrUpdateRelease(githubContext, tagName, releaseName, releaseNotes, headData.object.sha)
 
-  setOutput('release-url', release.url)
-  setOutput('release-id', release.id.toString())
-  setOutput('version', newVersion)
-  setOutput('tag', release.tagName)
+  setReleaseOutputs({
+    skipped: false,
+    releaseUrl: release.url,
+    releaseId: release.id.toString(),
+    version: newVersion,
+    tag: release.tagName
+  })
 }
