@@ -47257,8 +47257,15 @@ const isRetryableError = (err) => {
     // GitHub secondary rate limits can return 403 with Retry-After.
     if (err.status === 403) {
         const retryAfter = getHeaderValue(err.response?.headers, 'retry-after');
-        if (retryAfter != null && (!Number.isNaN(Number.parseFloat(retryAfter)) || !Number.isNaN(Date.parse(retryAfter)))) {
-            return true;
+        if (retryAfter != null) {
+            const retryAfterSeconds = Number.parseFloat(retryAfter);
+            if (!Number.isNaN(retryAfterSeconds) && retryAfterSeconds >= 0) {
+                return true;
+            }
+            const retryAfterDateMs = Date.parse(retryAfter);
+            if (!Number.isNaN(retryAfterDateMs)) {
+                return Math.max(0, retryAfterDateMs - Date.now()) >= 0;
+            }
         }
     }
     if (err.code != null && RETRYABLE_NETWORK_CODES.has(err.code)) {
@@ -47472,18 +47479,20 @@ const createOrUpdateRelease = async (context, tagName, releaseName, releaseNotes
                         warning(`Old draft release ${oldDraft.tag_name} (ID: ${String(oldDraft.id)}) was already deleted by another workflow run`);
                         continue;
                     }
-                    const deletionDetails = deletionError instanceof Error
-                        ? (() => {
-                            const cleanupError = deletionError;
-                            return [
-                                cleanupError.status != null ? `status ${String(cleanupError.status)}` : undefined,
-                                cleanupError.code != null ? `code ${cleanupError.code}` : undefined,
-                                deletionError.message
-                            ]
-                                .filter(part => part != null && part.length > 0)
-                                .join(', ');
-                        })()
-                        : String(deletionError);
+                    let deletionDetails;
+                    if (deletionError instanceof Error) {
+                        const cleanupError = deletionError;
+                        deletionDetails = [
+                            cleanupError.status != null ? `status ${String(cleanupError.status)}` : undefined,
+                            cleanupError.code != null ? `code ${cleanupError.code}` : undefined,
+                            deletionError.message
+                        ]
+                            .filter(part => part != null && part.length > 0)
+                            .join(', ');
+                    }
+                    else {
+                        deletionDetails = String(deletionError);
+                    }
                     warning(`Failed to delete old draft release ${oldDraft.tag_name} (ID: ${String(oldDraft.id)}): ${deletionDetails}`);
                 }
             }
