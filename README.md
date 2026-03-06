@@ -100,13 +100,14 @@ jobs:
 | Input                    | Description                                                                                                            | Required | Default          |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------- | -------- | ---------------- |
 | `github-token`           | GitHub token for API authentication. Use `GITHUB_TOKEN` with `contents: write` permission, or a PAT with `repo` scope. | Yes      | -                |
-| `tag-prefix`             | Prefix for version tags. Must be <= 20 chars and use only letters, numbers, `.`, `-`, `_`, `/`                      | No       | `v`              |
+| `tag-prefix`             | Prefix for version tags. Must be <= 20 chars and use only letters, numbers, `.`, `-`, `_`, `/`                         | No       | `v`              |
 | `release-branch`         | The branch to monitor for new commits                                                                                  | No       | `main`           |
 | `dry-run`                | Simulate the process without creating releases                                                                         | No       | `false`          |
 | `release-notes-template` | Template for release notes formatting                                                                                  | No       | Default template |
 | `initial-version`        | The initial version to start from                                                                                      | No       | `1.0.0`          |
 
 `tag-prefix` validation is strict and fails the action when invalid:
+
 - Maximum length: `20` characters
 - Allowed characters: letters (`a-z`, `A-Z`), numbers (`0-9`), dot (`.`), hyphen (`-`), underscore (`_`), slash (`/`)
 

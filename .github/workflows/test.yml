@@ -44,5 +44,11 @@ jobs:
       - name: Type check
         run: pnpm -s tsc --noEmit
 
+      - name: Lint
+        run: pnpm eslint . --max-warnings 0 --no-warn-ignored
+
+      - name: Prettier check
+        run: pnpm prettier --check .
+
       - name: Run tests
         run: pnpm test
