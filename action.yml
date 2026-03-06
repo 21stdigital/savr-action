@@ -27,6 +27,7 @@ inputs:
   release-notes-template:
     description: A template to format the generated release notes
     required: false
+    # Keep this default in sync with src/templates.ts -> DEFAULT_TEMPLATE fallback.
     default: |
       {{#if features}}
       ### ✨ Features
@@ -67,6 +68,10 @@ inputs:
 
 # Define your outputs here.
 outputs:
+  skipped:
+    description: Whether release creation was skipped (true when dry-run, no version bump, or no new commits)
+  dry-run:
+    description: Whether the action ran in dry-run mode
   version:
     description: The calculated version for the release
   tag:

@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createOrUpdateRelease, deleteRelease, getCommits, type GitHubContext, SAVR_MARKER } from '../src/github.js'
+import { createOrUpdateRelease, deleteRelease, getCommits, getTags, type GitHubContext, SAVR_MARKER } from '../src/github.js'
 
 describe('github', () => {
   const mockOctokit = {
     rest: {
       repos: {
+        listTags: vi.fn(),
         listCommits: vi.fn(),
         listReleases: vi.fn(),
         createRelease: vi.fn(),
@@ -643,6 +644,112 @@ describe('github', () => {
       await expect(getCommits(githubContext, 'head-1', 'missing-tag-sha')).rejects.toThrow(
         'Unable to find target tag commit missing-tag-sha in history for head head-1'
       )
+    })
+  })
+
+  describe('getTags', () => {
+    it('should aggregate tags across two pages', async () => {
+      const firstPageTags = Array.from({ length: 100 }, (_, index) => ({ name: `v1.0.${String(index + 1)}` }))
+      const secondPageTags = [{ name: 'v1.1.0' }, { name: 'v1.1.1' }]
+
+      mockOctokit.rest.repos.listTags.mockResolvedValueOnce({ data: firstPageTags }).mockResolvedValueOnce({
+        data: secondPageTags
+      })
+
+      const tags = await getTags(githubContext)
+
+      expect(mockOctokit.rest.repos.listTags).toHaveBeenCalledTimes(2)
+      expect(mockOctokit.rest.repos.listTags).toHaveBeenNthCalledWith(1, {
+        owner: 'test-owner',
+        repo: 'test-repo',
+        per_page: 100,
+        page: 1
+      })
+      expect(mockOctokit.rest.repos.listTags).toHaveBeenNthCalledWith(2, {
+        owner: 'test-owner',
+        repo: 'test-repo',
+        per_page: 100,
+        page: 2
+      })
+      expect(tags).toHaveLength(102)
+      expect(tags[0]).toEqual({ name: 'v1.0.1', version: 'v1.0.1' })
+      expect(tags[101]).toEqual({ name: 'v1.1.1', version: 'v1.1.1' })
+    })
+
+    it('should handle an empty second page after a full first page', async () => {
+      const firstPageTags = Array.from({ length: 100 }, (_, index) => ({ name: `v2.0.${String(index + 1)}` }))
+
+      mockOctokit.rest.repos.listTags.mockResolvedValueOnce({ data: firstPageTags }).mockResolvedValueOnce({ data: [] })
+
+      const tags = await getTags(githubContext)
+
+      expect(mockOctokit.rest.repos.listTags).toHaveBeenCalledTimes(2)
+      expect(mockOctokit.rest.repos.listTags).toHaveBeenNthCalledWith(1, {
+        owner: 'test-owner',
+        repo: 'test-repo',
+        per_page: 100,
+        page: 1
+      })
+      expect(mockOctokit.rest.repos.listTags).toHaveBeenNthCalledWith(2, {
+        owner: 'test-owner',
+        repo: 'test-repo',
+        per_page: 100,
+        page: 2
+      })
+      expect(tags).toHaveLength(100)
+      expect(tags[99]).toEqual({ name: 'v2.0.100', version: 'v2.0.100' })
+    })
+
+    it('should stop after one page when exactly 100 tags exist', async () => {
+      const firstPageTags = Array.from({ length: 100 }, (_, index) => ({ name: `v3.0.${String(index + 1)}` }))
+
+      mockOctokit.rest.repos.listTags.mockResolvedValueOnce({ data: firstPageTags }).mockResolvedValueOnce({ data: [] })
+
+      const tags = await getTags(githubContext)
+
+      expect(mockOctokit.rest.repos.listTags).toHaveBeenCalledTimes(2)
+      expect(mockOctokit.rest.repos.listTags).toHaveBeenNthCalledWith(1, {
+        owner: 'test-owner',
+        repo: 'test-repo',
+        per_page: 100,
+        page: 1
+      })
+      expect(mockOctokit.rest.repos.listTags).toHaveBeenNthCalledWith(2, {
+        owner: 'test-owner',
+        repo: 'test-repo',
+        per_page: 100,
+        page: 2
+      })
+      expect(tags).toHaveLength(100)
+      expect(tags[0]).toEqual({ name: 'v3.0.1', version: 'v3.0.1' })
+      expect(tags[99]).toEqual({ name: 'v3.0.100', version: 'v3.0.100' })
+    })
+
+    it('should fetch 101 tags across two pages', async () => {
+      const firstPageTags = Array.from({ length: 100 }, (_, index) => ({ name: `v4.0.${String(index + 1)}` }))
+      const secondPageTags = [{ name: 'v4.0.101' }]
+
+      mockOctokit.rest.repos.listTags.mockResolvedValueOnce({ data: firstPageTags }).mockResolvedValueOnce({
+        data: secondPageTags
+      })
+
+      const tags = await getTags(githubContext)
+
+      expect(mockOctokit.rest.repos.listTags).toHaveBeenCalledTimes(2)
+      expect(mockOctokit.rest.repos.listTags).toHaveBeenNthCalledWith(1, {
+        owner: 'test-owner',
+        repo: 'test-repo',
+        per_page: 100,
+        page: 1
+      })
+      expect(mockOctokit.rest.repos.listTags).toHaveBeenNthCalledWith(2, {
+        owner: 'test-owner',
+        repo: 'test-repo',
+        per_page: 100,
+        page: 2
+      })
+      expect(tags).toHaveLength(101)
+      expect(tags[100]).toEqual({ name: 'v4.0.101', version: 'v4.0.101' })
     })
   })
 })

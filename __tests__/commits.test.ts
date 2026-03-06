@@ -10,6 +10,7 @@ describe('commits', () => {
         type: 'feat',
         subject: 'add new feature',
         message: 'feat: add new feature',
+        body: '',
         breaking: false
       })
     })
@@ -21,6 +22,7 @@ describe('commits', () => {
         scope: 'api',
         subject: 'fix endpoint',
         message: 'fix(api): fix endpoint',
+        body: '',
         breaking: false
       })
     })
@@ -31,6 +33,7 @@ describe('commits', () => {
         type: 'feat',
         subject: 'breaking change',
         message: 'feat!: breaking change',
+        body: '',
         breaking: true
       })
     })
@@ -42,6 +45,7 @@ describe('commits', () => {
         scope: 'api',
         subject: 'breaking change',
         message: 'feat(api)!: breaking change',
+        body: '',
         breaking: true
       })
     })
@@ -52,6 +56,7 @@ describe('commits', () => {
         type: 'chore',
         subject: 'random commit message',
         message: 'random commit message',
+        body: '',
         breaking: false
       })
     })
@@ -62,6 +67,7 @@ describe('commits', () => {
         type: 'feat',
         subject: 'add new feature',
         message: 'feat: add new feature',
+        body: 'This is a detailed description of the feature.',
         breaking: false
       })
     })
@@ -73,6 +79,7 @@ describe('commits', () => {
         scope: 'api,ui',
         subject: 'add new feature',
         message: 'feat(api,ui): add new feature',
+        body: '',
         breaking: false
       })
     })
@@ -83,6 +90,7 @@ describe('commits', () => {
         type: 'feat',
         subject: 'add new feature',
         message: 'feat: add new feature',
+        body: 'BREAKING CHANGE: This is a breaking change',
         breaking: true
       })
     })
@@ -93,6 +101,7 @@ describe('commits', () => {
         type: 'feat',
         subject: 'add new feature',
         message: 'feat: add new feature',
+        body: 'BREAKING-CHANGE: This is a breaking change',
         breaking: true
       })
     })
@@ -105,8 +114,14 @@ describe('commits', () => {
         type: 'feat',
         subject: 'support multiple languages',
         message: 'feat: support multiple languages',
+        body: '* feat: enhance authentication flow\n* fix: update locale type',
         breaking: false
       })
+    })
+
+    it('should preserve multiline commit body formatting except subject line', () => {
+      const commit = parseCommit('fix: patch parser\n\nFirst paragraph.\n\nSecond paragraph.')
+      expect(commit.body).toBe('First paragraph.\n\nSecond paragraph.')
     })
   })
 
