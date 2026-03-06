@@ -71,11 +71,9 @@ permissions:
   contents: write
 
 concurrency:
-  # Mitigation: serialize SAVR runs per workflow+ref to reduce draft-release races.
-  # The `savr-` prefix is optional; any stable, repo-unique key works.
-  group: ${{ github.workflow }}-${{ github.ref }}
-  # Safer default: queue runs instead of canceling active ones.
-  cancel-in-progress: false
+  # Serialize SAVR runs per workflow+ref so newer pushes supersede older draft runs.
+  group: draft-release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   release:
@@ -103,10 +101,9 @@ jobs:
 ```
 
 > [!TIP]
-> Keep `concurrency` enabled as a mitigation, not a complete fix.
-> `cancel-in-progress: false` is the safer default for SAVR because queued runs avoid mid-flight cancellation races.
-> Tradeoff: newer pushes wait for the current run to finish, so release-note updates may appear later.
-> If you set `cancel-in-progress: true`, cancellation is cooperative and timing-dependent, so race windows can still occur.
+> Keep `concurrency` enabled to reduce overlapping draft-release runs on the same ref.
+> The example above matches the bundled workflow: newer pushes cancel older in-flight draft updates so the latest commit wins.
+> Cleanup is still best-effort, so a successful release create/update does not fail just because deleting older SAVR-managed drafts hit a race or transient GitHub error.
 
 ## Inputs
 
@@ -147,7 +144,8 @@ jobs:
 
 - On every push, SAVR calculates the next semantic version based on commits since the last tag
 - It creates or updates a single draft release with the generated release notes
-- **Important:** When a new draft release is created, all previous SAVR-managed draft releases are automatically deleted. Only the latest draft release is kept. Manually created draft releases are not affected
+- **Important:** When a new draft release is created, SAVR attempts to delete previous SAVR-managed draft releases so only the latest draft is kept. Manually created draft releases are not affected.
+- Cleanup is best-effort: if deleting an older SAVR-managed draft races with another workflow run or GitHub returns a transient error, the current release update still succeeds and the action logs a warning instead of failing.
 
 ## Version Bump Rules
 
