@@ -3,11 +3,11 @@ import { getOctokit } from '@actions/github'
 import type { Mock } from 'vitest'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { categorizeCommits, determineVersionBump } from '../src/commits/index.js'
-import { createOrUpdateRelease, getCommits, getTags } from '../src/github/index.js'
+import { categorizeCommits, determineVersionBump } from '../src/commits.js'
+import { createOrUpdateRelease, getCommits, getTags } from '../src/github.js'
 import { run } from '../src/main.js'
-import { compileReleaseNotes } from '../src/templates/index.js'
-import { getLatestVersion, incrementVersion } from '../src/version/index.js'
+import { compileReleaseNotes } from '../src/templates.js'
+import { getLatestVersion, incrementVersion } from '../src/version.js'
 
 vi.mock('@actions/core')
 vi.mock('@actions/github', () => ({
@@ -19,10 +19,10 @@ vi.mock('@actions/github', () => ({
   },
   getOctokit: vi.fn()
 }))
-vi.mock('../src/github/index.js')
-vi.mock('../src/commits/index.js')
-vi.mock('../src/version/index.js')
-vi.mock('../src/templates/index.js')
+vi.mock('../src/github.js')
+vi.mock('../src/commits.js')
+vi.mock('../src/version.js')
+vi.mock('../src/templates.js')
 
 describe('main', () => {
   const mockOctokit = {

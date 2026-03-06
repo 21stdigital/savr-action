@@ -47088,7 +47088,7 @@ function getOctokit(token, options, ...additionalPlugins) {
 //# sourceMappingURL=github.js.map
 // EXTERNAL MODULE: ./node_modules/.pnpm/semver@7.7.4/node_modules/semver/index.js
 var semver = __nccwpck_require__(9419);
-;// CONCATENATED MODULE: ./src/utils/index.ts
+;// CONCATENATED MODULE: ./src/utils.ts
 /**
  * Utility functions for safe logging and string handling
  */
@@ -47122,7 +47122,7 @@ const sanitizeLogOutput = (input) => {
     return input.replace(/::/g, ':\u200B:');
 };
 
-;// CONCATENATED MODULE: ./src/commits/index.ts
+;// CONCATENATED MODULE: ./src/commits.ts
 
 
 const COMMIT_TYPES = [
@@ -47196,7 +47196,7 @@ const determineVersionBump = (categorizedCommits) => {
     return undefined;
 };
 
-;// CONCATENATED MODULE: ./src/github/index.ts
+;// CONCATENATED MODULE: ./src/github.ts
 
 
 const SAVR_MARKER = '<!-- savr-managed-release -->';
@@ -47370,7 +47370,7 @@ const createOrUpdateRelease = async (context, tagName, releaseName, releaseNotes
 // EXTERNAL MODULE: ./node_modules/.pnpm/handlebars@4.7.8/node_modules/handlebars/lib/index.js
 var handlebars_lib = __nccwpck_require__(3190);
 var handlebars_lib_default = /*#__PURE__*/__nccwpck_require__.n(handlebars_lib);
-;// CONCATENATED MODULE: ./src/templates/index.ts
+;// CONCATENATED MODULE: ./src/templates.ts
 
 
 // Convert scope to title case (e.g., "main-navigation" -> "Main Navigation")
@@ -47478,7 +47478,7 @@ const compileReleaseNotes = (template, data) => {
     }
 };
 
-;// CONCATENATED MODULE: ./src/version/index.ts
+;// CONCATENATED MODULE: ./src/version.ts
 
 
 const incrementVersion = (version, type) => {

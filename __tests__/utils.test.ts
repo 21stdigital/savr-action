@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { sanitizeLogOutput } from '../src/utils/index.js'
+import { sanitizeLogOutput } from '../src/utils.js'
 
 describe('utils', () => {
   describe('sanitizeLogOutput', () => {
