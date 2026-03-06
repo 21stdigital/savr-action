@@ -13,7 +13,7 @@ inputs:
     description: Token used for GitHub API authentication
     required: true
   tag-prefix:
-    description: 'The prefix for version tags (default: v)'
+    description: 'The prefix for version tags (default: v). Must be 20 characters or fewer and contain only letters, numbers, dots (.), hyphens (-), underscores (_), and slashes (/).'
     required: false
     default: 'v'
   release-branch:
