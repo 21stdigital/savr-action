@@ -125,12 +125,21 @@ export const deleteRelease = async (context: GitHubContext, releaseId: number): 
   }
 }
 
-const listAllReleases = async (
-  context: GitHubContext
-): Promise<{ id: number; tag_name: string; draft: boolean; html_url: string; body?: string | null }[]> => {
-  const allReleases: { id: number; tag_name: string; draft: boolean; html_url: string; body?: string | null }[] = []
+interface ReleaseDraftSummary {
+  id: number
+  tag_name: string
+  body?: string | null
+}
+
+const listDraftReleasesForCreateOrUpdate = async (
+  context: GitHubContext,
+  tagName: string
+): Promise<{ existingDraft?: ReleaseDraftSummary; staleDrafts: ReleaseDraftSummary[] }> => {
+  let existingDraft: ReleaseDraftSummary | undefined
+  const staleDrafts: ReleaseDraftSummary[] = []
   let page = 1
   let hasMore = true
+  let foundExistingDraftOnPreviousPage = false
 
   while (hasMore) {
     debug(`Fetching releases page ${String(page)}`)
@@ -141,15 +150,56 @@ const listAllReleases = async (
       page
     })
 
-    allReleases.push(...pageReleases)
+    for (const release of pageReleases) {
+      if (!release.draft) {
+        continue
+      }
 
-    hasMore = pageReleases.length === 100
+      const draftRelease: ReleaseDraftSummary = {
+        id: release.id,
+        tag_name: release.tag_name,
+        body: release.body
+      }
+
+      if (release.tag_name === tagName) {
+        // Keep the first match because GitHub returns releases newest-first.
+        // This preserves pre-refactor behavior (`Array.find`) when duplicate
+        // draft tags exist due to race conditions.
+        existingDraft ??= draftRelease
+        continue
+      }
+
+      if (release.body?.includes(SAVR_MARKER)) {
+        staleDrafts.push(draftRelease)
+      }
+    }
+
+    const isFullPage = pageReleases.length === 100
+
+    // Safe early-stop heuristic:
+    // GitHub release pages are ordered newest-first. Once we have found the
+    // current tag's draft, scanning one additional full page captures nearby
+    // stale SAVR drafts while avoiding deep pagination through old published
+    // releases in large repositories. Older stale drafts are cleanup-only and
+    // can be handled by subsequent runs.
+    if (foundExistingDraftOnPreviousPage && isFullPage) {
+      break
+    }
+
+    if (existingDraft) {
+      foundExistingDraftOnPreviousPage = true
+    }
+
+    hasMore = isFullPage
     if (hasMore) {
       page++
     }
   }
 
-  return allReleases
+  return {
+    existingDraft,
+    staleDrafts
+  }
 }
 
 export const createOrUpdateRelease = async (
@@ -163,8 +213,7 @@ export const createOrUpdateRelease = async (
   debug(`Checking for existing draft release with tag ${tagName}`)
 
   try {
-    const releases = await listAllReleases(context)
-    const existingDraft = releases.find(({ draft, tag_name }) => draft && tag_name === tagName)
+    const { existingDraft, staleDrafts } = await listDraftReleasesForCreateOrUpdate(context, tagName)
 
     const releaseParams = {
       owner: context.owner,
@@ -191,10 +240,7 @@ export const createOrUpdateRelease = async (
     }
 
     // Clean up other draft releases (keep only the current one)
-    const otherDrafts = releases.filter(
-      ({ draft, tag_name, id, body }) =>
-        draft && tag_name !== tagName && id !== release.id && body?.includes(SAVR_MARKER)
-    )
+    const otherDrafts = staleDrafts.filter(({ id }) => id !== release.id)
 
     if (otherDrafts.length > 0) {
       info(`Found ${String(otherDrafts.length)} old draft release(s) to delete`)

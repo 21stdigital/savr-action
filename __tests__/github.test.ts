@@ -345,6 +345,203 @@ describe('github', () => {
       })
     })
 
+    it('should continue pagination for cleanup even when current draft is found on page one', async () => {
+      const pageOneReleases = [
+        {
+          id: 1,
+          tag_name: 'v2.0.0',
+          draft: true,
+          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v2.0.0',
+          body: `Existing release notes\n${SAVR_MARKER}`
+        },
+        ...Array.from({ length: 99 }, (_, index) => {
+          const releaseNumber = String(index + 1)
+          return {
+            id: index + 2,
+            tag_name: `v0.${releaseNumber}.0`,
+            draft: false,
+            html_url: `https://github.com/test-owner/test-repo/releases/tag/v0.${releaseNumber}.0`
+          }
+        })
+      ]
+
+      mockOctokit.rest.repos.listReleases.mockResolvedValueOnce({ data: pageOneReleases }).mockResolvedValueOnce({
+        data: [
+          {
+            id: 101,
+            tag_name: 'v1.9.9',
+            draft: true,
+            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.9.9',
+            body: `Release notes\n${SAVR_MARKER}`
+          }
+        ]
+      })
+      mockOctokit.rest.repos.updateRelease.mockResolvedValue({
+        data: {
+          id: 1,
+          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v2.0.0',
+          tag_name: 'v2.0.0'
+        }
+      })
+      mockOctokit.rest.repos.deleteRelease.mockResolvedValue({ data: {} })
+
+      await createOrUpdateRelease(githubContext, 'v2.0.0', '2.0.0', 'Release notes')
+
+      expect(mockOctokit.rest.repos.listReleases).toHaveBeenCalledTimes(2)
+      expect(mockOctokit.rest.repos.updateRelease).toHaveBeenCalledWith(
+        expect.objectContaining({
+          owner: 'test-owner',
+          repo: 'test-repo',
+          release_id: 1,
+          tag_name: 'v2.0.0',
+          name: '2.0.0',
+          body: `Release notes\n${SAVR_MARKER}`,
+          draft: true
+        })
+      )
+      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledTimes(1)
+      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        release_id: 101
+      })
+    })
+
+    it('should keep the first matching draft when duplicate tag drafts appear across pages', async () => {
+      const pageOneReleases = [
+        {
+          id: 10,
+          tag_name: 'v2.0.0',
+          draft: true,
+          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v2.0.0',
+          body: `Newest duplicate draft\n${SAVR_MARKER}`
+        },
+        ...Array.from({ length: 99 }, (_, index) => {
+          const releaseNumber = String(index + 1)
+          return {
+            id: index + 11,
+            tag_name: `v0.${releaseNumber}.0`,
+            draft: false,
+            html_url: `https://github.com/test-owner/test-repo/releases/tag/v0.${releaseNumber}.0`
+          }
+        })
+      ]
+
+      mockOctokit.rest.repos.listReleases.mockResolvedValueOnce({ data: pageOneReleases }).mockResolvedValueOnce({
+        data: [
+          {
+            id: 110,
+            tag_name: 'v2.0.0',
+            draft: true,
+            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v2.0.0',
+            body: `Older duplicate draft\n${SAVR_MARKER}`
+          },
+          {
+            id: 111,
+            tag_name: 'v1.9.9',
+            draft: true,
+            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.9.9',
+            body: `Release notes\n${SAVR_MARKER}`
+          }
+        ]
+      })
+      mockOctokit.rest.repos.updateRelease.mockResolvedValue({
+        data: {
+          id: 10,
+          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v2.0.0',
+          tag_name: 'v2.0.0'
+        }
+      })
+      mockOctokit.rest.repos.deleteRelease.mockResolvedValue({ data: {} })
+
+      await createOrUpdateRelease(githubContext, 'v2.0.0', '2.0.0', 'Release notes')
+
+      expect(mockOctokit.rest.repos.listReleases).toHaveBeenCalledTimes(2)
+      expect(mockOctokit.rest.repos.updateRelease).toHaveBeenCalledWith(
+        expect.objectContaining({
+          owner: 'test-owner',
+          repo: 'test-repo',
+          release_id: 10
+        })
+      )
+      expect(mockOctokit.rest.repos.updateRelease).not.toHaveBeenCalledWith(
+        expect.objectContaining({
+          release_id: 110
+        })
+      )
+      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        release_id: 111
+      })
+    })
+
+    it('should stop pagination after scanning one full page beyond the found draft', async () => {
+      const pageOneReleases = [
+        {
+          id: 1,
+          tag_name: 'v2.0.0',
+          draft: true,
+          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v2.0.0',
+          body: `Existing release notes\n${SAVR_MARKER}`
+        },
+        ...Array.from({ length: 99 }, (_, index) => {
+          const releaseNumber = String(index + 1)
+          return {
+            id: index + 2,
+            tag_name: `v0.${releaseNumber}.0`,
+            draft: false,
+            html_url: `https://github.com/test-owner/test-repo/releases/tag/v0.${releaseNumber}.0`
+          }
+        })
+      ]
+
+      const pageTwoReleases = Array.from({ length: 100 }, (_, index) => {
+        const releaseNumber = String(index + 101)
+        return {
+          id: index + 101,
+          tag_name: `v0.${releaseNumber}.0`,
+          draft: false,
+          html_url: `https://github.com/test-owner/test-repo/releases/tag/v0.${releaseNumber}.0`
+        }
+      })
+
+      mockOctokit.rest.repos.listReleases.mockResolvedValueOnce({ data: pageOneReleases }).mockResolvedValueOnce({
+        data: pageTwoReleases
+      })
+      mockOctokit.rest.repos.updateRelease.mockResolvedValue({
+        data: {
+          id: 1,
+          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v2.0.0',
+          tag_name: 'v2.0.0'
+        }
+      })
+
+      await createOrUpdateRelease(githubContext, 'v2.0.0', '2.0.0', 'Release notes')
+
+      expect(mockOctokit.rest.repos.listReleases).toHaveBeenCalledTimes(2)
+      expect(mockOctokit.rest.repos.listReleases).toHaveBeenNthCalledWith(1, {
+        owner: 'test-owner',
+        repo: 'test-repo',
+        per_page: 100,
+        page: 1
+      })
+      expect(mockOctokit.rest.repos.listReleases).toHaveBeenNthCalledWith(2, {
+        owner: 'test-owner',
+        repo: 'test-repo',
+        per_page: 100,
+        page: 2
+      })
+      expect(mockOctokit.rest.repos.updateRelease).toHaveBeenCalledWith(
+        expect.objectContaining({
+          owner: 'test-owner',
+          repo: 'test-repo',
+          release_id: 1
+        })
+      )
+      expect(mockOctokit.rest.repos.deleteRelease).not.toHaveBeenCalled()
+    })
+
     it('should not delete non-SAVR draft releases during cleanup', async () => {
       mockOctokit.rest.repos.listReleases.mockResolvedValue({
         data: [
