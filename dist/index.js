@@ -47090,31 +47090,8 @@ function getOctokit(token, options, ...additionalPlugins) {
 var semver = __nccwpck_require__(9419);
 ;// CONCATENATED MODULE: ./src/utils.ts
 /**
- * Utility functions for safe logging and string handling
- */
-/**
- * Sanitizes a string for safe logging in GitHub Actions.
- *
- * GitHub Actions interprets lines starting with `::` as workflow commands.
- * Malicious or accidental commit messages containing these patterns could:
- * - Inject fake annotations (::error::, ::warning::, ::notice::)
- * - Mask arbitrary strings (::add-mask::)
- * - Manipulate workflow outputs
- *
- * This function escapes `::` sequences to prevent workflow command injection.
- *
- * @param input - The string to sanitize (e.g., commit message, release notes)
- * @returns The sanitized string safe for logging
- *
- * @example
- * ```ts
- * // Dangerous input
- * const message = "feat: ::set-output name=foo::bar"
- *
- * // Safe for logging
- * info(sanitizeLogOutput(message))
- * // Outputs: "feat: \u200B::\u200Bset-output name=foo\u200B::\u200Bbar"
- * ```
+ * Escapes `::` sequences to prevent GitHub Actions workflow command injection.
+ * Inserts a zero-width space between colons so commands are not interpreted.
  */
 const sanitizeLogOutput = (input) => {
     // Insert a zero-width space between the two colons to break the command pattern
@@ -47557,43 +47534,30 @@ var handlebars_lib_default = /*#__PURE__*/__nccwpck_require__.n(handlebars_lib);
 ;// CONCATENATED MODULE: ./src/templates.ts
 
 
-// Convert scope to title case (e.g., "main-navigation" -> "Main Navigation")
-const toTitleCase = (scope) => {
-    return scope
-        .split(/[-_]/)
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-        .join(' ');
-};
 // Register Handlebars helper to group commits by scope
 handlebars_lib_default().registerHelper('groupByScope', (commits) => {
     const grouped = new Map();
     // Group commits by scope
     for (const commit of commits) {
-        const scope = toTitleCase(commit.scope ?? 'General');
+        const scope = (commit.scope ?? 'General')
+            .split(/[-_]/)
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+            .join(' ');
         if (!grouped.has(scope)) {
             grouped.set(scope, []);
         }
-        const scopeCommits = grouped.get(scope);
-        if (scopeCommits) {
-            scopeCommits.push(commit);
-        }
+        grouped.get(scope)?.push(commit);
     }
     // Convert to array and sort: General last, others alphabetically
-    const result = [];
-    const sortedScopes = Array.from(grouped.keys()).sort((a, b) => {
+    return Array.from(grouped.keys())
+        .sort((a, b) => {
         if (a === 'General')
             return 1;
         if (b === 'General')
             return -1;
         return a.localeCompare(b);
-    });
-    for (const scope of sortedScopes) {
-        const commits = grouped.get(scope);
-        if (commits) {
-            result.push({ scope, commits });
-        }
-    }
-    return result;
+    })
+        .map(scope => ({ scope, commits: grouped.get(scope) ?? [] }));
 });
 // Keep this fallback template in sync with action.yml -> inputs.release-notes-template.default.
 const DEFAULT_TEMPLATE = `{{#if features}}
@@ -47629,10 +47593,6 @@ const DEFAULT_TEMPLATE = `{{#if features}}
 {{/each}}
 {{/if}}
 `;
-const renderReleaseNotes = (template, data) => {
-    const compiledTemplate = handlebars_lib_default().compile(template);
-    return compiledTemplate(data);
-};
 const compileReleaseNotes = (template, data) => {
     core_debug(`Compiling release notes for version ${data.version}`);
     core_debug(`Template statistics:
@@ -47641,19 +47601,19 @@ const compileReleaseNotes = (template, data) => {
     - Breaking changes: ${String(data.breaking.length)}`);
     const hasCustomTemplate = template && template.trim() !== '';
     if (!hasCustomTemplate) {
-        const releaseNotes = renderReleaseNotes(DEFAULT_TEMPLATE, data);
+        const releaseNotes = handlebars_lib_default().compile(DEFAULT_TEMPLATE)(data);
         info('Release notes compiled successfully');
         return releaseNotes;
     }
     try {
-        const releaseNotes = renderReleaseNotes(template, data);
+        const releaseNotes = handlebars_lib_default().compile(template)(data);
         info('Release notes compiled successfully');
         return releaseNotes;
     }
     catch (err) {
         warning(`Invalid custom release notes template provided: ${err instanceof Error ? err.message : String(err)}. Falling back to default template.`);
         try {
-            const releaseNotes = renderReleaseNotes(DEFAULT_TEMPLATE, data);
+            const releaseNotes = handlebars_lib_default().compile(DEFAULT_TEMPLATE)(data);
             info('Release notes compiled successfully with fallback default template');
             return releaseNotes;
         }
