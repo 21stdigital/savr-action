@@ -131,6 +131,14 @@ Breaking changes are detected by:
 
 When enabled, logs all actions without making API calls to create/update releases.
 
+## GitHub Issues
+
+- **All issues must conform to the issue templates** in `.github/ISSUE_TEMPLATE/`. Available templates: Bug Report (`bug`), Feature Request (`enhancement`), Improvement (`improvement`), Documentation (`documentation`). Fill in all required sections for the chosen template.
+- `blank_issues_enabled: false` — freeform issues are not allowed.
+- When creating issues via `gh issue create`, structure the body with the same section headers and content as the corresponding template form fields.
+- When findings are identified during code reviews, create GitHub issues for them immediately.
+- For test-related findings, use the Improvement template with area set to the relevant module.
+
 ## Test Structure
 
 Tests located in `__tests__/`:

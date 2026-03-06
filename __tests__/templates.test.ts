@@ -231,6 +231,34 @@ describe('templates', () => {
       expect(notes).toContain('Breaking: false')
     })
 
+    it('should expose commit body for custom templates without changing subject/message behavior', () => {
+      const template = `
+# Release {{version}}
+{{#each features}}
+- subject={{this.subject}} message={{this.message}} body={{this.body}}
+{{/each}}
+`
+      const data = {
+        version: '1.0.0',
+        features: [
+          {
+            type: 'feat',
+            subject: 'new feature',
+            message: 'feat: new feature',
+            body: 'Details for release notes.',
+            breaking: false
+          }
+        ],
+        fixes: [],
+        breaking: []
+      }
+
+      const notes = compileReleaseNotes(template, data)
+      expect(notes).toContain('subject=new feature')
+      expect(notes).toContain('message=feat: new feature')
+      expect(notes).toContain('body=Details for release notes.')
+    })
+
     it('should fall back to default template when custom template is malformed', () => {
       const template = `
 # Release {{version}}

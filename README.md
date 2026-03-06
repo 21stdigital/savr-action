@@ -108,14 +108,22 @@ jobs:
 
 ## Outputs
 
-| Output        | Description                                         |
-| ------------- | --------------------------------------------------- |
-| `version`     | The calculated version number (e.g., `1.2.3`)       |
-| `tag`         | The full tag name including prefix (e.g., `v1.2.3`) |
-| `release-url` | The URL of the created/updated draft release        |
-| `release-id`  | The ID of the created/updated draft release         |
+| Output        | Description                                                                                  |
+| ------------- | -------------------------------------------------------------------------------------------- |
+| `version`     | The calculated version number (e.g., `1.2.3`)                                                |
+| `tag`         | The full tag name including prefix (e.g., `v1.2.3`)                                          |
+| `release-url` | The URL of the created/updated draft release                                                 |
+| `release-id`  | The ID of the created/updated draft release                                                  |
+| `skipped`     | Whether release creation was skipped (true when dry-run, no version bump, or no new commits) |
+| `dry-run`     | Whether the action ran in dry-run mode                                                       |
 
-> **Note:** Outputs are only set when a release is actually created or updated. They will be empty in dry-run mode, when HEAD matches the latest tag, or when no version bump is needed (e.g., only `chore`/`docs` commits).
+> **Note:** `version`, `tag`, `release-url`, and `release-id` are set on all paths. On skip and dry-run paths, `release-url` and `release-id` will be empty strings. Use `skipped` and `dry-run` to distinguish outcomes:
+>
+> | Scenario              | `skipped` | `dry-run` |
+> | --------------------- | --------- | --------- |
+> | Release created       | `false`   | `false`   |
+> | Dry-run               | `true`    | `true`    |
+> | HEAD == tag / no bump | `true`    | `false`   |
 
 ## How It Works
 
