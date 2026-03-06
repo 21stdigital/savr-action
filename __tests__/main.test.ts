@@ -9,14 +9,17 @@ import { run } from '../src/main.js'
 import { compileReleaseNotes } from '../src/templates.js'
 import { getLatestVersion, incrementVersion } from '../src/version.js'
 
+const mockGithubContext = vi.hoisted(() => ({
+  ref: 'refs/heads/main',
+  repo: {
+    owner: 'owner',
+    repo: 'repo'
+  }
+}))
+
 vi.mock('@actions/core')
 vi.mock('@actions/github', () => ({
-  context: {
-    repo: {
-      owner: 'owner',
-      repo: 'repo'
-    }
-  },
+  context: mockGithubContext,
   getOctokit: vi.fn()
 }))
 vi.mock('../src/github.js')
@@ -25,6 +28,38 @@ vi.mock('../src/version.js')
 vi.mock('../src/templates.js')
 
 describe('main', () => {
+  const baseInputs = {
+    'github-token': 'token',
+    'tag-prefix': 'v',
+    'release-branch': 'main',
+    'release-notes-template': '',
+    'initial-version': '0.1.0'
+  } as const
+
+  const setInputs = (overrides: Record<string, string> = {}) => {
+    const inputs: Record<string, string> = { ...baseInputs, ...overrides }
+    ;(getInput as Mock).mockImplementation((name: string) => inputs[name])
+  }
+
+  const setupInitialReleaseFlow = () => {
+    ;(getTags as Mock).mockResolvedValue([])
+    mockOctokit.rest.git.getRef.mockResolvedValue({ data: { object: { sha: 'head-sha' } } })
+    ;(getCommits as Mock).mockResolvedValue([
+      { type: 'feat', subject: 'new feature', message: 'feat: new feature', breaking: false }
+    ])
+    ;(categorizeCommits as Mock).mockReturnValue({
+      features: [{ type: 'feat', subject: 'new feature', message: 'feat: new feature', breaking: false }],
+      fixes: [],
+      breaking: []
+    })
+    ;(compileReleaseNotes as Mock).mockReturnValue('Release notes')
+    ;(createOrUpdateRelease as Mock).mockResolvedValue({
+      url: 'https://github.com/owner/repo/releases/tag/v0.1.0',
+      id: 123,
+      tagName: 'v0.1.0'
+    })
+  }
+
   const mockOctokit = {
     rest: {
       git: {
@@ -36,22 +71,8 @@ describe('main', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
-    ;(getInput as Mock).mockImplementation((name: string) => {
-      switch (name) {
-        case 'github-token':
-          return 'token'
-        case 'tag-prefix':
-          return 'v'
-        case 'release-branch':
-          return 'main'
-        case 'release-notes-template':
-          return ''
-        case 'initial-version':
-          return '0.1.0'
-        default:
-          return ''
-      }
-    })
+    mockGithubContext.ref = 'refs/heads/main'
+    setInputs()
     ;(getBooleanInput as Mock).mockReturnValue(false)
     ;(getOctokit as Mock).mockReturnValue(mockOctokit)
     ;(getLatestVersion as Mock).mockReturnValue(undefined)
@@ -60,22 +81,7 @@ describe('main', () => {
 
   describe('run', () => {
     it('should create initial release when no tags exist', async () => {
-      ;(getTags as Mock).mockResolvedValue([])
-      mockOctokit.rest.git.getRef.mockResolvedValue({ data: { object: { sha: 'head-sha' } } })
-      ;(getCommits as Mock).mockResolvedValue([
-        { type: 'feat', subject: 'new feature', message: 'feat: new feature', breaking: false }
-      ])
-      ;(categorizeCommits as Mock).mockReturnValue({
-        features: [{ type: 'feat', subject: 'new feature', message: 'feat: new feature', breaking: false }],
-        fixes: [],
-        breaking: []
-      })
-      ;(compileReleaseNotes as Mock).mockReturnValue('Release notes')
-      ;(createOrUpdateRelease as Mock).mockResolvedValue({
-        url: 'https://github.com/owner/repo/releases/tag/v0.1.0',
-        id: 123,
-        tagName: 'v0.1.0'
-      })
+      setupInitialReleaseFlow()
 
       await run()
 
@@ -97,6 +103,55 @@ describe('main', () => {
       expect(setOutput).toHaveBeenCalledWith('tag', 'v0.1.0')
       expect(setOutput).toHaveBeenCalledWith('skipped', 'false')
       expect(setOutput).toHaveBeenCalledWith('dry-run', 'false')
+    })
+
+    it('should skip when release-branch does not match triggering branch', async () => {
+      mockGithubContext.ref = 'refs/heads/develop'
+
+      await run()
+
+      expect(getTags).not.toHaveBeenCalled()
+      expect(mockOctokit.rest.git.getRef).not.toHaveBeenCalled()
+      expect(getCommits).not.toHaveBeenCalled()
+      expect(createOrUpdateRelease).not.toHaveBeenCalled()
+      expect(setOutput).not.toHaveBeenCalled()
+    })
+
+    it('should skip when workflow is triggered by non-branch ref', async () => {
+      mockGithubContext.ref = 'refs/tags/v1.0.0'
+
+      await run()
+
+      expect(getTags).not.toHaveBeenCalled()
+      expect(mockOctokit.rest.git.getRef).not.toHaveBeenCalled()
+      expect(getCommits).not.toHaveBeenCalled()
+      expect(createOrUpdateRelease).not.toHaveBeenCalled()
+      expect(setOutput).not.toHaveBeenCalled()
+    })
+
+    it('should normalize branch refs before validation and ref lookup', async () => {
+      setInputs({ 'release-branch': 'refs/heads/main' })
+      setupInitialReleaseFlow()
+
+      await run()
+
+      expect(mockOctokit.rest.git.getRef).toHaveBeenCalledWith({ owner: 'owner', repo: 'repo', ref: 'heads/main' })
+      expect(createOrUpdateRelease).toHaveBeenCalledTimes(1)
+    })
+
+    it('should support release branches with slashes', async () => {
+      setInputs({ 'release-branch': 'release/1.0' })
+      mockGithubContext.ref = 'refs/heads/release/1.0'
+      setupInitialReleaseFlow()
+
+      await run()
+
+      expect(mockOctokit.rest.git.getRef).toHaveBeenCalledWith({
+        owner: 'owner',
+        repo: 'repo',
+        ref: 'heads/release/1.0'
+      })
+      expect(createOrUpdateRelease).toHaveBeenCalledTimes(1)
     })
 
     it('should update release when tags exist', async () => {
@@ -339,85 +394,25 @@ describe('main', () => {
     })
 
     it('should throw for invalid initial-version', async () => {
-      ;(getInput as Mock).mockImplementation((name: string) => {
-        switch (name) {
-          case 'github-token':
-            return 'token'
-          case 'tag-prefix':
-            return 'v'
-          case 'release-branch':
-            return 'main'
-          case 'release-notes-template':
-            return ''
-          case 'initial-version':
-            return 'not-valid'
-          default:
-            return ''
-        }
-      })
+      setInputs({ 'initial-version': 'not-valid' })
 
       await expect(run()).rejects.toThrow('Invalid initial version')
     })
 
     it('should throw when tag-prefix exceeds 20 characters', async () => {
-      ;(getInput as Mock).mockImplementation((name: string) => {
-        switch (name) {
-          case 'github-token':
-            return 'token'
-          case 'tag-prefix':
-            return 'a-very-long-prefix-that-exceeds'
-          case 'release-branch':
-            return 'main'
-          case 'release-notes-template':
-            return ''
-          case 'initial-version':
-            return '0.1.0'
-          default:
-            return ''
-        }
-      })
+      setInputs({ 'tag-prefix': 'a-very-long-prefix-that-exceeds' })
 
       await expect(run()).rejects.toThrow('tag-prefix must be at most 20 characters')
     })
 
     it('should throw when tag-prefix contains invalid characters', async () => {
-      ;(getInput as Mock).mockImplementation((name: string) => {
-        switch (name) {
-          case 'github-token':
-            return 'token'
-          case 'tag-prefix':
-            return 'v@#!'
-          case 'release-branch':
-            return 'main'
-          case 'release-notes-template':
-            return ''
-          case 'initial-version':
-            return '0.1.0'
-          default:
-            return ''
-        }
-      })
+      setInputs({ 'tag-prefix': 'v@#!' })
 
       await expect(run()).rejects.toThrow('tag-prefix contains invalid characters')
     })
 
     it('should throw when release-branch is empty', async () => {
-      ;(getInput as Mock).mockImplementation((name: string) => {
-        switch (name) {
-          case 'github-token':
-            return 'token'
-          case 'tag-prefix':
-            return 'v'
-          case 'release-branch':
-            return '   '
-          case 'release-notes-template':
-            return ''
-          case 'initial-version':
-            return '0.1.0'
-          default:
-            return ''
-        }
-      })
+      setInputs({ 'release-branch': '   ' })
 
       await expect(run()).rejects.toThrow('release-branch must not be empty')
     })

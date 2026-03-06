@@ -47563,6 +47563,8 @@ const getLatestVersion = (tags, tagPrefix) => {
 
 
 
+const BRANCH_REF_PREFIX = 'refs/heads/';
+const normalizeBranchRef = (branchRef) => branchRef.startsWith(BRANCH_REF_PREFIX) ? branchRef.slice(BRANCH_REF_PREFIX.length) : branchRef;
 const processCommits = async (githubContext, head, sinceTag) => {
     const commits = await getCommits(githubContext, head, sinceTag);
     info('Retrieved commits:');
@@ -47580,7 +47582,7 @@ const processCommits = async (githubContext, head, sinceTag) => {
 const run = async () => {
     const token = getInput('github-token', { required: true });
     const tagPrefix = getInput('tag-prefix');
-    const releaseBranch = getInput('release-branch');
+    const releaseBranchInput = getInput('release-branch');
     const releaseNotesTemplate = getInput('release-notes-template');
     const dryRun = getBooleanInput('dry-run');
     const initialVersion = getInput('initial-version');
@@ -47593,8 +47595,19 @@ const run = async () => {
     if (!/^[a-zA-Z0-9._\-/]*$/.test(tagPrefix)) {
         throw new Error(`tag-prefix contains invalid characters: "${tagPrefix}". Only alphanumeric, dots, hyphens, underscores, and slashes are allowed`);
     }
-    if (!releaseBranch.trim()) {
+    if (!releaseBranchInput.trim()) {
         throw new Error('release-branch must not be empty');
+    }
+    const releaseBranch = normalizeBranchRef(releaseBranchInput.trim());
+    const triggerRef = github_context.ref.trim();
+    if (!triggerRef.startsWith(BRANCH_REF_PREFIX)) {
+        info(`Skipping release: workflow was triggered by non-branch ref "${triggerRef}"`);
+        return;
+    }
+    const triggerBranch = normalizeBranchRef(triggerRef);
+    if (triggerBranch !== releaseBranch) {
+        info(`Skipping release: configured release-branch "${releaseBranch}" does not match triggering branch "${triggerBranch}"`);
+        return;
     }
     const octokit = getOctokit(token);
     const { owner, repo } = github_context.repo;
