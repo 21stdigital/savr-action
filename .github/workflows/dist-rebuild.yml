@@ -1,18 +1,21 @@
-name: Test
+name: Rebuild dist/
 
 on:
-  pull_request:
+  pull_request_target:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  test:
-    name: Test
+  dist-rebuild:
+    name: Rebuild dist/
     runs-on: ubuntu-latest
+    if: github.event.pull_request.head.repo.full_name == github.repository
 
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.head_ref }}
 
       - name: Install pnpm
         uses: pnpm/action-setup@v4
@@ -41,5 +44,16 @@ jobs:
       - name: Build
         run: pnpm build
 
-      - name: Run tests
-        run: pnpm test
+      - name: Check dist/ is up to date
+        id: dist-check
+        run: |
+          if [ -n "$(git diff --name-only dist/)" ]; then
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Commit updated dist/
+        if: steps.dist-check.outputs.changed == 'true'
+        uses: stefanzweifel/git-auto-commit-action@v7
+        with:
+          commit_message: 'chore: rebuild dist/'
+          file_pattern: 'dist/*'
