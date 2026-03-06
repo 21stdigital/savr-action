@@ -47297,6 +47297,7 @@ const listDraftReleasesForCreateOrUpdate = async (context, tagName) => {
     const staleDrafts = [];
     let page = 1;
     let hasMore = true;
+    let foundExistingDraftOnPreviousPage = false;
     while (hasMore) {
         core_debug(`Fetching releases page ${String(page)}`);
         const { data: pageReleases } = await context.octokit.rest.repos.listReleases({
@@ -47315,14 +47316,30 @@ const listDraftReleasesForCreateOrUpdate = async (context, tagName) => {
                 body: release.body
             };
             if (release.tag_name === tagName) {
-                existingDraft = draftRelease;
+                // Keep the first match because GitHub returns releases newest-first.
+                // This preserves pre-refactor behavior (`Array.find`) when duplicate
+                // draft tags exist due to race conditions.
+                existingDraft ??= draftRelease;
                 continue;
             }
             if (release.body?.includes(SAVR_MARKER)) {
                 staleDrafts.push(draftRelease);
             }
         }
-        hasMore = pageReleases.length === 100;
+        const isFullPage = pageReleases.length === 100;
+        // Safe early-stop heuristic:
+        // GitHub release pages are ordered newest-first. Once we have found the
+        // current tag's draft, scanning one additional full page captures nearby
+        // stale SAVR drafts while avoiding deep pagination through old published
+        // releases in large repositories. Older stale drafts are cleanup-only and
+        // can be handled by subsequent runs.
+        if (foundExistingDraftOnPreviousPage && isFullPage) {
+            break;
+        }
+        if (existingDraft) {
+            foundExistingDraftOnPreviousPage = true;
+        }
+        hasMore = isFullPage;
         if (hasMore) {
             page++;
         }
