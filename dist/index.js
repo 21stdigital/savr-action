@@ -47552,43 +47552,30 @@ var handlebars_lib_default = /*#__PURE__*/__nccwpck_require__.n(handlebars_lib);
 ;// CONCATENATED MODULE: ./src/templates.ts
 
 
-// Convert scope to title case (e.g., "main-navigation" -> "Main Navigation")
-const toTitleCase = (scope) => {
-    return scope
-        .split(/[-_]/)
-        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-        .join(' ');
-};
 // Register Handlebars helper to group commits by scope
 handlebars_lib_default().registerHelper('groupByScope', (commits) => {
     const grouped = new Map();
     // Group commits by scope
     for (const commit of commits) {
-        const scope = toTitleCase(commit.scope ?? 'General');
+        const scope = (commit.scope ?? 'General')
+            .split(/[-_]/)
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+            .join(' ');
         if (!grouped.has(scope)) {
             grouped.set(scope, []);
         }
-        const scopeCommits = grouped.get(scope);
-        if (scopeCommits) {
-            scopeCommits.push(commit);
-        }
+        grouped.get(scope)?.push(commit);
     }
     // Convert to array and sort: General last, others alphabetically
-    const result = [];
-    const sortedScopes = Array.from(grouped.keys()).sort((a, b) => {
+    return Array.from(grouped.keys())
+        .sort((a, b) => {
         if (a === 'General')
             return 1;
         if (b === 'General')
             return -1;
         return a.localeCompare(b);
-    });
-    for (const scope of sortedScopes) {
-        const commits = grouped.get(scope);
-        if (commits) {
-            result.push({ scope, commits });
-        }
-    }
-    return result;
+    })
+        .map(scope => ({ scope, commits: grouped.get(scope) ?? [] }));
 });
 // Keep this fallback template in sync with action.yml -> inputs.release-notes-template.default.
 const DEFAULT_TEMPLATE = `{{#if features}}
@@ -47624,10 +47611,6 @@ const DEFAULT_TEMPLATE = `{{#if features}}
 {{/each}}
 {{/if}}
 `;
-const renderReleaseNotes = (template, data) => {
-    const compiledTemplate = handlebars_lib_default().compile(template);
-    return compiledTemplate(data);
-};
 const compileReleaseNotes = (template, data) => {
     core_debug(`Compiling release notes for version ${data.version}`);
     core_debug(`Template statistics:
@@ -47636,19 +47619,19 @@ const compileReleaseNotes = (template, data) => {
     - Breaking changes: ${String(data.breaking.length)}`);
     const hasCustomTemplate = template && template.trim() !== '';
     if (!hasCustomTemplate) {
-        const releaseNotes = renderReleaseNotes(DEFAULT_TEMPLATE, data);
+        const releaseNotes = handlebars_lib_default().compile(DEFAULT_TEMPLATE)(data);
         info('Release notes compiled successfully');
         return releaseNotes;
     }
     try {
-        const releaseNotes = renderReleaseNotes(template, data);
+        const releaseNotes = handlebars_lib_default().compile(template)(data);
         info('Release notes compiled successfully');
         return releaseNotes;
     }
     catch (err) {
         warning(`Invalid custom release notes template provided: ${err instanceof Error ? err.message : String(err)}. Falling back to default template.`);
         try {
-            const releaseNotes = renderReleaseNotes(DEFAULT_TEMPLATE, data);
+            const releaseNotes = handlebars_lib_default().compile(DEFAULT_TEMPLATE)(data);
             info('Release notes compiled successfully with fallback default template');
             return releaseNotes;
         }
