@@ -1,5 +1,5 @@
 import { getBooleanInput, getInput, setOutput } from '@actions/core'
-import { getOctokit } from '@actions/github'
+import { context, getOctokit } from '@actions/github'
 import type { Mock } from 'vitest'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -36,6 +36,7 @@ describe('main', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+    ;(context as { ref: string }).ref = 'refs/heads/main'
     ;(getInput as Mock).mockImplementation((name: string) => {
       switch (name) {
         case 'github-token':
@@ -97,6 +98,58 @@ describe('main', () => {
       expect(setOutput).toHaveBeenCalledWith('tag', 'v0.1.0')
       expect(setOutput).toHaveBeenCalledWith('skipped', 'false')
       expect(setOutput).toHaveBeenCalledWith('dry-run', 'false')
+    })
+
+    it('should skip when release-branch does not match triggering branch', async () => {
+      ;(context as { ref: string }).ref = 'refs/heads/develop'
+
+      await run()
+
+      expect(getTags).not.toHaveBeenCalled()
+      expect(mockOctokit.rest.git.getRef).not.toHaveBeenCalled()
+      expect(getCommits).not.toHaveBeenCalled()
+      expect(createOrUpdateRelease).not.toHaveBeenCalled()
+      expect(setOutput).not.toHaveBeenCalled()
+    })
+
+    it('should normalize branch refs before validation and ref lookup', async () => {
+      ;(getInput as Mock).mockImplementation((name: string) => {
+        switch (name) {
+          case 'github-token':
+            return 'token'
+          case 'tag-prefix':
+            return 'v'
+          case 'release-branch':
+            return 'refs/heads/main'
+          case 'release-notes-template':
+            return ''
+          case 'initial-version':
+            return '0.1.0'
+          default:
+            return ''
+        }
+      })
+      ;(getTags as Mock).mockResolvedValue([])
+      mockOctokit.rest.git.getRef.mockResolvedValue({ data: { object: { sha: 'head-sha' } } })
+      ;(getCommits as Mock).mockResolvedValue([
+        { type: 'feat', subject: 'new feature', message: 'feat: new feature', breaking: false }
+      ])
+      ;(categorizeCommits as Mock).mockReturnValue({
+        features: [{ type: 'feat', subject: 'new feature', message: 'feat: new feature', breaking: false }],
+        fixes: [],
+        breaking: []
+      })
+      ;(compileReleaseNotes as Mock).mockReturnValue('Release notes')
+      ;(createOrUpdateRelease as Mock).mockResolvedValue({
+        url: 'https://github.com/owner/repo/releases/tag/v0.1.0',
+        id: 123,
+        tagName: 'v0.1.0'
+      })
+
+      await run()
+
+      expect(mockOctokit.rest.git.getRef).toHaveBeenCalledWith({ owner: 'owner', repo: 'repo', ref: 'heads/main' })
+      expect(createOrUpdateRelease).toHaveBeenCalledTimes(1)
     })
 
     it('should update release when tags exist', async () => {

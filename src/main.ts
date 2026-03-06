@@ -16,6 +16,11 @@ interface ReleaseOutputs {
   releaseId?: string
 }
 
+const BRANCH_REF_PREFIX = 'refs/heads/'
+
+const normalizeBranchRef = (branchRef: string): string =>
+  branchRef.startsWith(BRANCH_REF_PREFIX) ? branchRef.slice(BRANCH_REF_PREFIX.length) : branchRef
+
 const processCommits = async (githubContext: GitHubContext, head: string, sinceTag?: string) => {
   const commits = await getCommits(githubContext, head, sinceTag)
   info('Retrieved commits:')
@@ -36,7 +41,7 @@ const processCommits = async (githubContext: GitHubContext, head: string, sinceT
 export const run = async (): Promise<void> => {
   const token = getInput('github-token', { required: true })
   const tagPrefix = getInput('tag-prefix')
-  const releaseBranch = getInput('release-branch')
+  const releaseBranchInput = getInput('release-branch')
   const releaseNotesTemplate = getInput('release-notes-template')
   const dryRun = getBooleanInput('dry-run')
   const initialVersion = getInput('initial-version')
@@ -54,8 +59,24 @@ export const run = async (): Promise<void> => {
     )
   }
 
-  if (!releaseBranch.trim()) {
+  if (!releaseBranchInput.trim()) {
     throw new Error('release-branch must not be empty')
+  }
+
+  const releaseBranch = normalizeBranchRef(releaseBranchInput.trim())
+  const triggerRef = context.ref.trim()
+
+  if (!triggerRef.startsWith(BRANCH_REF_PREFIX)) {
+    info(`Skipping release: workflow was triggered by non-branch ref "${triggerRef}"`)
+    return
+  }
+
+  const triggerBranch = normalizeBranchRef(triggerRef)
+  if (triggerBranch !== releaseBranch) {
+    info(
+      `Skipping release: configured release-branch "${releaseBranch}" does not match triggering branch "${triggerBranch}"`
+    )
+    return
   }
 
   const octokit = getOctokit(token)
