@@ -318,6 +318,18 @@ export const deleteRelease = async (context: GitHubContext, releaseId: number): 
   }
 }
 
+const formatCleanupDeletionError = (err: unknown): string => {
+  if (err instanceof Error) {
+    const cleanupError = err as RetryableGitHubError
+    const status = cleanupError.status != null ? `status ${String(cleanupError.status)}` : undefined
+    const code = cleanupError.code != null ? `code ${cleanupError.code}` : undefined
+
+    return [status, code, err.message].filter(part => part != null && part.length > 0).join(', ')
+  }
+
+  return String(err)
+}
+
 interface ReleaseDraftSummary {
   id: number
   tag_name: string
@@ -458,7 +470,11 @@ export const createOrUpdateRelease = async (
             continue
           }
 
-          throw deletionError
+          warning(
+            `Failed to delete old draft release ${oldDraft.tag_name} (ID: ${String(oldDraft.id)}): ${formatCleanupDeletionError(
+              deletionError
+            )}`
+          )
         }
       }
     }

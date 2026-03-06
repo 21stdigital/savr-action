@@ -47421,6 +47421,15 @@ const deleteRelease = async (context, releaseId) => {
         throw err;
     }
 };
+const formatCleanupDeletionError = (err) => {
+    if (err instanceof Error) {
+        const cleanupError = err;
+        const status = cleanupError.status != null ? `status ${String(cleanupError.status)}` : undefined;
+        const code = cleanupError.code != null ? `code ${cleanupError.code}` : undefined;
+        return [status, code, err.message].filter(part => part != null && part.length > 0).join(', ');
+    }
+    return String(err);
+};
 const listDraftReleasesForCreateOrUpdate = async (context, tagName) => {
     let existingDraft;
     const staleDrafts = [];
@@ -47520,7 +47529,7 @@ const createOrUpdateRelease = async (context, tagName, releaseName, releaseNotes
                         warning(`Old draft release ${oldDraft.tag_name} (ID: ${String(oldDraft.id)}) was already deleted by another workflow run`);
                         continue;
                     }
-                    throw deletionError;
+                    warning(`Failed to delete old draft release ${oldDraft.tag_name} (ID: ${String(oldDraft.id)}): ${formatCleanupDeletionError(deletionError)}`);
                 }
             }
         }

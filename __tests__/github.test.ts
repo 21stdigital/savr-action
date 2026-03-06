@@ -40,6 +40,10 @@ describe('github', () => {
 
   beforeEach(() => {
     vi.clearAllMocks()
+
+    Object.values(mockOctokit.rest.repos).forEach(mockFn => {
+      mockFn.mockReset()
+    })
   })
 
   describe('deleteRelease', () => {
@@ -649,6 +653,88 @@ describe('github', () => {
         repo: 'test-repo',
         release_id: 1
       })
+      expect(warning).toHaveBeenCalledWith(
+        'Old draft release v1.0.1 (ID: 1) was already deleted by another workflow run'
+      )
+    })
+
+    it('should warn and continue when old draft cleanup fails with a non-404 error', async () => {
+      mockOctokit.rest.repos.listReleases.mockResolvedValue({
+        data: [
+          {
+            id: 1,
+            tag_name: 'v1.0.1',
+            draft: true,
+            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.1',
+            body: `Release notes\n${SAVR_MARKER}`
+          }
+        ]
+      })
+      mockOctokit.rest.repos.createRelease.mockResolvedValue({
+        data: {
+          id: 2,
+          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.1.0',
+          tag_name: 'v1.1.0'
+        }
+      })
+      const rateLimitError = Object.assign(new Error('Secondary rate limit'), { status: 429 })
+      mockOctokit.rest.repos.deleteRelease.mockRejectedValue(rateLimitError)
+
+      await expect(createOrUpdateRelease(githubContext, 'v1.1.0', '1.1.0', 'Release notes')).resolves.toEqual({
+        id: 2,
+        url: 'https://github.com/test-owner/test-repo/releases/tag/v1.1.0',
+        tagName: 'v1.1.0'
+      })
+      expect(warning).toHaveBeenCalledWith(
+        'Failed to delete old draft release v1.0.1 (ID: 1): status 429, Secondary rate limit'
+      )
+    })
+
+    it('should continue deleting remaining old drafts after one cleanup failure', async () => {
+      mockOctokit.rest.repos.listReleases.mockResolvedValue({
+        data: [
+          {
+            id: 1,
+            tag_name: 'v1.0.1',
+            draft: true,
+            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.1',
+            body: `Release notes\n${SAVR_MARKER}`
+          },
+          {
+            id: 2,
+            tag_name: 'v1.0.2',
+            draft: true,
+            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.2',
+            body: `Release notes\n${SAVR_MARKER}`
+          }
+        ]
+      })
+      mockOctokit.rest.repos.createRelease.mockResolvedValue({
+        data: {
+          id: 3,
+          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.1.0',
+          tag_name: 'v1.1.0'
+        }
+      })
+      const persistentFailure = Object.assign(new Error('Forbidden'), { status: 403 })
+      mockOctokit.rest.repos.deleteRelease.mockRejectedValueOnce(persistentFailure).mockResolvedValueOnce({ data: {} })
+
+      await expect(createOrUpdateRelease(githubContext, 'v1.1.0', '1.1.0', 'Release notes')).resolves.toEqual({
+        id: 3,
+        url: 'https://github.com/test-owner/test-repo/releases/tag/v1.1.0',
+        tagName: 'v1.1.0'
+      })
+      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        release_id: 1
+      })
+      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        release_id: 2
+      })
+      expect(warning).toHaveBeenCalledWith('Failed to delete old draft release v1.0.1 (ID: 1): status 403, Forbidden')
     })
   })
 
