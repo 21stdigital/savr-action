@@ -30,11 +30,6 @@ const processCommits = async (githubContext: GitHubContext, head: string, sinceT
   })
 
   const categorizedCommits = categorizeCommits(commits)
-  info('Categorized commits:')
-  info(`Features: ${categorizedCommits.features.length.toString()}`)
-  info(`Fixes: ${categorizedCommits.fixes.length.toString()}`)
-  info(`Breaking: ${categorizedCommits.breaking.length.toString()}`)
-
   return { commits, categorizedCommits }
 }
 

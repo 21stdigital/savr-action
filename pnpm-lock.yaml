@@ -47,9 +47,6 @@ importers:
       '@github/local-action':
         specifier: 7.0.1
         version: 7.0.1
-      '@octokit/rest':
-        specifier: 22.0.1
-        version: 22.0.1
       '@types/node':
         specifier: 24.5.2
         version: 24.5.2
