@@ -10,7 +10,6 @@ const MAX_GITHUB_API_RETRIES = 3
 const INITIAL_RETRY_DELAY_MS = 500
 const MAX_RETRY_DELAY_MS = 10_000
 const MAX_RATE_LIMIT_DELAY_MS = 120_000
-const MAX_JITTER_MS = 250
 
 const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504])
 const RETRYABLE_NETWORK_CODES = new Set([
@@ -113,8 +112,8 @@ const applyJitter = (delayMs: number): number => {
     return 0
   }
 
-  const jitterMs = Math.round(Math.random() * Math.min(MAX_JITTER_MS, Math.ceil(delayMs * 0.2)))
-  return delayMs + jitterMs
+  // Full jitter distributes retries across the full delay window.
+  return Math.round(Math.random() * delayMs)
 }
 
 const getRetryDelayMs = (attempt: number, err: RetryableGitHubError): number => {
@@ -167,13 +166,43 @@ export const withGitHubApiRetry = async <T>(operation: string, request: () => Pr
       const delayMs = getRetryDelayMs(retryAttempt, err)
       warning(
         `GitHub API request failed during ${operation} with ${
-          err.status != null ? `status ${String(err.status)}` : err.code ?? 'unknown error'
+          err.status != null ? `status ${String(err.status)}` : (err.code ?? 'unknown error')
         }; retrying in ${String(delayMs)}ms (${String(retryAttempt)}/${String(MAX_GITHUB_API_RETRIES)})`
       )
 
       await sleep(delayMs)
     }
   }
+}
+
+export const getGitRef = async (
+  context: GitHubContext,
+  ref: string
+): Promise<{ object: { sha: string; type?: string } }> => {
+  const { data } = await withGitHubApiRetry(`git.getRef(${ref})`, () =>
+    context.octokit.rest.git.getRef({
+      owner: context.owner,
+      repo: context.repo,
+      ref
+    })
+  )
+
+  return data
+}
+
+export const getAnnotatedTag = async (
+  context: GitHubContext,
+  tagSha: string
+): Promise<{ object: { sha: string; type: string } }> => {
+  const { data } = await withGitHubApiRetry(`git.getTag(${tagSha})`, () =>
+    context.octokit.rest.git.getTag({
+      owner: context.owner,
+      repo: context.repo,
+      tag_sha: tagSha
+    })
+  )
+
+  return data
 }
 
 export const getTags = async (context: GitHubContext): Promise<Tag[]> => {

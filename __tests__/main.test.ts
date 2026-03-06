@@ -4,7 +4,7 @@ import type { Mock } from 'vitest'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { categorizeCommits, determineVersionBump } from '../src/commits.js'
-import { createOrUpdateRelease, getCommits, getTags, withGitHubApiRetry } from '../src/github.js'
+import { createOrUpdateRelease, getAnnotatedTag, getCommits, getGitRef, getTags } from '../src/github.js'
 import { run } from '../src/main.js'
 import { compileReleaseNotes } from '../src/templates.js'
 import { getLatestVersion, incrementVersion } from '../src/version.js'
@@ -77,8 +77,13 @@ describe('main', () => {
     ;(getOctokit as Mock).mockReturnValue(mockOctokit)
     ;(getLatestVersion as Mock).mockReturnValue(undefined)
     ;(determineVersionBump as Mock).mockReturnValue(null)
-    ;(withGitHubApiRetry as Mock).mockImplementation(async (_operation: string, request: () => Promise<unknown>) =>
-      request()
+    ;(getGitRef as Mock).mockImplementation(
+      async (_context: unknown, ref: string) =>
+        (await mockOctokit.rest.git.getRef({ owner: 'owner', repo: 'repo', ref })).data
+    )
+    ;(getAnnotatedTag as Mock).mockImplementation(
+      async (_context: unknown, tagSha: string) =>
+        (await mockOctokit.rest.git.getTag({ owner: 'owner', repo: 'repo', tag_sha: tagSha })).data
     )
   })
 
@@ -88,7 +93,7 @@ describe('main', () => {
 
       await run()
 
-      expect(withGitHubApiRetry).toHaveBeenCalledWith('git.getRef(heads/main)', expect.any(Function))
+      expect(getGitRef).toHaveBeenCalledWith({ owner: 'owner', repo: 'repo', octokit: mockOctokit }, 'heads/main')
       expect(mockOctokit.rest.git.getRef).toHaveBeenCalledWith({ owner: 'owner', repo: 'repo', ref: 'heads/main' })
       expect(getCommits).toHaveBeenCalledWith(
         { owner: 'owner', repo: 'repo', octokit: mockOctokit },
@@ -186,8 +191,12 @@ describe('main', () => {
 
       await run()
 
-      expect(withGitHubApiRetry).toHaveBeenNthCalledWith(1, 'git.getRef(tags/v1.0.0)', expect.any(Function))
-      expect(withGitHubApiRetry).toHaveBeenNthCalledWith(2, 'git.getRef(heads/main)', expect.any(Function))
+      expect(getGitRef).toHaveBeenNthCalledWith(
+        1,
+        { owner: 'owner', repo: 'repo', octokit: mockOctokit },
+        'tags/v1.0.0'
+      )
+      expect(getGitRef).toHaveBeenNthCalledWith(2, { owner: 'owner', repo: 'repo', octokit: mockOctokit }, 'heads/main')
       expect(mockOctokit.rest.git.getTag).not.toHaveBeenCalled()
       expect(createOrUpdateRelease).toHaveBeenCalledWith(
         { owner: 'owner', repo: 'repo', octokit: mockOctokit },
@@ -319,9 +328,16 @@ describe('main', () => {
 
       await run()
 
-      expect(withGitHubApiRetry).toHaveBeenNthCalledWith(1, 'git.getRef(tags/v1.0.0)', expect.any(Function))
-      expect(withGitHubApiRetry).toHaveBeenNthCalledWith(2, 'git.getRef(heads/main)', expect.any(Function))
-      expect(withGitHubApiRetry).toHaveBeenNthCalledWith(3, 'git.getTag(tag-object-sha)', expect.any(Function))
+      expect(getGitRef).toHaveBeenNthCalledWith(
+        1,
+        { owner: 'owner', repo: 'repo', octokit: mockOctokit },
+        'tags/v1.0.0'
+      )
+      expect(getGitRef).toHaveBeenNthCalledWith(2, { owner: 'owner', repo: 'repo', octokit: mockOctokit }, 'heads/main')
+      expect(getAnnotatedTag).toHaveBeenCalledWith(
+        { owner: 'owner', repo: 'repo', octokit: mockOctokit },
+        'tag-object-sha'
+      )
       expect(mockOctokit.rest.git.getTag).toHaveBeenCalledWith({
         owner: 'owner',
         repo: 'repo',

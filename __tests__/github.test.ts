@@ -659,14 +659,12 @@ describe('github', () => {
         response: { headers: { 'retry-after': '0' } }
       })
 
-      mockOctokit.rest.repos.listCommits
-        .mockRejectedValueOnce(rateLimitError)
-        .mockResolvedValueOnce({
-          data: [
-            { sha: 'head-1', commit: { message: 'feat: first change' } },
-            { sha: 'tag-sha', commit: { message: 'chore: tagged release' } }
-          ]
-        })
+      mockOctokit.rest.repos.listCommits.mockRejectedValueOnce(rateLimitError).mockResolvedValueOnce({
+        data: [
+          { sha: 'head-1', commit: { message: 'feat: first change' } },
+          { sha: 'tag-sha', commit: { message: 'chore: tagged release' } }
+        ]
+      })
 
       const commits = await getCommits(githubContext, 'head-1', 'tag-sha')
 
@@ -748,7 +746,7 @@ describe('github', () => {
       vi.useFakeTimers()
       vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
       const setTimeoutSpy = vi.spyOn(global, 'setTimeout')
-      const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0)
+      const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(1)
 
       const request = vi
         .fn<() => Promise<string>>()
@@ -778,14 +776,16 @@ describe('github', () => {
       vi.useFakeTimers()
       vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
       const setTimeoutSpy = vi.spyOn(global, 'setTimeout')
-      const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0)
+      const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(1)
 
       const request = vi
         .fn<() => Promise<string>>()
         .mockRejectedValueOnce(
           Object.assign(new Error('rate limited'), {
             status: 429,
-            response: { headers: { 'x-ratelimit-reset': String(Math.floor(Date.parse('2026-01-01T00:01:30.000Z') / 1000)) } }
+            response: {
+              headers: { 'x-ratelimit-reset': String(Math.floor(Date.parse('2026-01-01T00:01:30.000Z') / 1000)) }
+            }
           })
         )
         .mockResolvedValueOnce('ok')
@@ -804,18 +804,28 @@ describe('github', () => {
     })
 
     it('retries network failures with retryable error codes', async () => {
+      vi.useFakeTimers()
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout')
+      const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(1)
+
       const request = vi
         .fn<() => Promise<string>>()
         .mockRejectedValueOnce(
           Object.assign(new Error('network failed'), {
-            code: 'ECONNRESET',
-            response: { headers: { 'retry-after': '0' } }
+            code: 'ECONNRESET'
           })
         )
         .mockResolvedValueOnce('ok')
 
-      await expect(withGitHubApiRetry('test.network', request)).resolves.toBe('ok')
+      const promise = withGitHubApiRetry('test.network', request)
+      await vi.advanceTimersByTimeAsync(500)
+      await expect(promise).resolves.toBe('ok')
       expect(request).toHaveBeenCalledTimes(2)
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 500)
+
+      randomSpy.mockRestore()
+      setTimeoutSpy.mockRestore()
+      vi.useRealTimers()
     })
   })
 
