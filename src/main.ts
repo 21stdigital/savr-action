@@ -3,7 +3,7 @@ import { context, getOctokit } from '@actions/github'
 import { valid } from 'semver'
 
 import { categorizeCommits, determineVersionBump } from './commits.js'
-import { createOrUpdateRelease, getCommits, getTags, type GitHubContext } from './github.js'
+import { createOrUpdateRelease, getCommits, getTags, type GitHubContext, withGitHubApiRetry } from './github.js'
 import { compileReleaseNotes } from './templates.js'
 import { sanitizeLogOutput } from './utils.js'
 import { getLatestVersion, incrementVersion } from './version.js'
@@ -105,7 +105,9 @@ export const run = async (): Promise<void> => {
     const tagName = `${tagPrefix}${initialVersion}`
     const releaseName = initialVersion
 
-    const { data: headRef } = await octokit.rest.git.getRef({ owner, repo, ref: `heads/${releaseBranch}` })
+    const { data: headRef } = await withGitHubApiRetry(`git.getRef(heads/${releaseBranch})`, () =>
+      octokit.rest.git.getRef({ owner, repo, ref: `heads/${releaseBranch}` })
+    )
     const { categorizedCommits } = await processCommits(githubContext, headRef.object.sha)
     const releaseNotes = compileReleaseNotes(releaseNotesTemplate, {
       version: initialVersion,
@@ -137,16 +139,22 @@ export const run = async (): Promise<void> => {
     return
   }
 
-  const { data: tagData } = await octokit.rest.git.getRef({ owner, repo, ref: `tags/${latestTag.name}` })
-  const { data: headData } = await octokit.rest.git.getRef({ owner, repo, ref: `heads/${releaseBranch}` })
+  const { data: tagData } = await withGitHubApiRetry(`git.getRef(tags/${latestTag.name})`, () =>
+    octokit.rest.git.getRef({ owner, repo, ref: `tags/${latestTag.name}` })
+  )
+  const { data: headData } = await withGitHubApiRetry(`git.getRef(heads/${releaseBranch})`, () =>
+    octokit.rest.git.getRef({ owner, repo, ref: `heads/${releaseBranch}` })
+  )
 
   let latestTagCommitSha = tagData.object.sha
   if (tagData.object.type === 'tag') {
-    const { data: annotatedTagData } = await octokit.rest.git.getTag({
-      owner,
-      repo,
-      tag_sha: tagData.object.sha
-    })
+    const { data: annotatedTagData } = await withGitHubApiRetry(`git.getTag(${tagData.object.sha})`, () =>
+      octokit.rest.git.getTag({
+        owner,
+        repo,
+        tag_sha: tagData.object.sha
+      })
+    )
 
     if (annotatedTagData.object.type !== 'commit') {
       throw new Error(

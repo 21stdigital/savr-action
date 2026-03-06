@@ -4,7 +4,7 @@ import type { Mock } from 'vitest'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { categorizeCommits, determineVersionBump } from '../src/commits.js'
-import { createOrUpdateRelease, getCommits, getTags } from '../src/github.js'
+import { createOrUpdateRelease, getCommits, getTags, withGitHubApiRetry } from '../src/github.js'
 import { run } from '../src/main.js'
 import { compileReleaseNotes } from '../src/templates.js'
 import { getLatestVersion, incrementVersion } from '../src/version.js'
@@ -77,6 +77,9 @@ describe('main', () => {
     ;(getOctokit as Mock).mockReturnValue(mockOctokit)
     ;(getLatestVersion as Mock).mockReturnValue(undefined)
     ;(determineVersionBump as Mock).mockReturnValue(null)
+    ;(withGitHubApiRetry as Mock).mockImplementation(async (_operation: string, request: () => Promise<unknown>) =>
+      request()
+    )
   })
 
   describe('run', () => {

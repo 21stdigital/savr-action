@@ -6,7 +6,8 @@ import {
   getCommits,
   getTags,
   type GitHubContext,
-  SAVR_MARKER
+  SAVR_MARKER,
+  withGitHubApiRetry
 } from '../src/github.js'
 
 describe('github', () => {
@@ -48,6 +49,26 @@ describe('github', () => {
   })
 
   describe('createOrUpdateRelease', () => {
+    it('retries listReleases on transient 5xx errors', async () => {
+      const serviceUnavailable = Object.assign(new Error('Service Unavailable'), {
+        status: 503,
+        response: { headers: { 'retry-after': '0' } }
+      })
+      mockOctokit.rest.repos.listReleases.mockRejectedValueOnce(serviceUnavailable).mockResolvedValueOnce({ data: [] })
+      mockOctokit.rest.repos.createRelease.mockResolvedValue({
+        data: {
+          id: 1,
+          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0',
+          tag_name: 'v1.0.0'
+        }
+      })
+
+      const result = await createOrUpdateRelease(githubContext, 'v1.0.0', '1.0.0', 'Release notes')
+
+      expect(mockOctokit.rest.repos.listReleases).toHaveBeenCalledTimes(2)
+      expect(result.tagName).toBe('v1.0.0')
+    })
+
     it('should create a new draft release when none exists', async () => {
       mockOctokit.rest.repos.listReleases.mockResolvedValue({ data: [] })
       mockOctokit.rest.repos.createRelease.mockResolvedValue({
@@ -624,6 +645,28 @@ describe('github', () => {
   })
 
   describe('getCommits', () => {
+    it('retries commit fetches on rate limit responses', async () => {
+      const rateLimitError = Object.assign(new Error('Too Many Requests'), {
+        status: 429,
+        response: { headers: { 'retry-after': '0' } }
+      })
+
+      mockOctokit.rest.repos.listCommits
+        .mockRejectedValueOnce(rateLimitError)
+        .mockResolvedValueOnce({
+          data: [
+            { sha: 'head-1', commit: { message: 'feat: first change' } },
+            { sha: 'tag-sha', commit: { message: 'chore: tagged release' } }
+          ]
+        })
+
+      const commits = await getCommits(githubContext, 'head-1', 'tag-sha')
+
+      expect(mockOctokit.rest.repos.listCommits).toHaveBeenCalledTimes(2)
+      expect(commits).toHaveLength(1)
+      expect(commits[0]).toMatchObject({ type: 'feat', subject: 'first change' })
+    })
+
     it('should include commits up to but excluding sinceTag commit', async () => {
       mockOctokit.rest.repos.listCommits.mockResolvedValue({
         data: [
@@ -651,6 +694,34 @@ describe('github', () => {
       await expect(getCommits(githubContext, 'head-1', 'missing-tag-sha')).rejects.toThrow(
         'Unable to find target tag commit missing-tag-sha in history for head head-1'
       )
+    })
+
+    it('uses bounded retries and rethrows after retry limit is reached', async () => {
+      const transientFailure = Object.assign(new Error('Gateway Timeout'), {
+        status: 504,
+        response: { headers: { 'retry-after': '0' } }
+      })
+      mockOctokit.rest.repos.listCommits.mockRejectedValue(transientFailure)
+
+      await expect(getCommits(githubContext, 'head-1')).rejects.toThrow('Gateway Timeout')
+      expect(mockOctokit.rest.repos.listCommits).toHaveBeenCalledTimes(4)
+    })
+  })
+
+  describe('withGitHubApiRetry', () => {
+    it('retries network failures with retryable error codes', async () => {
+      const request = vi
+        .fn<() => Promise<string>>()
+        .mockRejectedValueOnce(
+          Object.assign(new Error('network failed'), {
+            code: 'ECONNRESET',
+            response: { headers: { 'retry-after': '0' } }
+          })
+        )
+        .mockResolvedValueOnce('ok')
+
+      await expect(withGitHubApiRetry('test.network', request)).resolves.toBe('ok')
+      expect(request).toHaveBeenCalledTimes(2)
     })
   })
 
