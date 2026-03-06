@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createOrUpdateRelease, deleteRelease, getCommits, getTags, type GitHubContext, SAVR_MARKER } from '../src/github.js'
+import {
+  createOrUpdateRelease,
+  deleteRelease,
+  getCommits,
+  getTags,
+  type GitHubContext,
+  SAVR_MARKER
+} from '../src/github.js'
 
 describe('github', () => {
   const mockOctokit = {
