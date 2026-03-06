@@ -70,6 +70,13 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  # Mitigation: serialize SAVR runs per workflow+ref to reduce draft-release races.
+  # The `savr-` prefix is optional; any stable, repo-unique key works.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  # Safer default: queue runs instead of canceling active ones.
+  cancel-in-progress: false
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -94,6 +101,12 @@ jobs:
           #   {{/each}}
           #   {{/if}}
 ```
+
+> [!TIP]
+> Keep `concurrency` enabled as a mitigation, not a complete fix.
+> `cancel-in-progress: false` is the safer default for SAVR because queued runs avoid mid-flight cancellation races.
+> Tradeoff: newer pushes wait for the current run to finish, so release-note updates may appear later.
+> If you set `cancel-in-progress: true`, cancellation is cooperative and timing-dependent, so race windows can still occur.
 
 ## Inputs
 
