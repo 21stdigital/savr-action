@@ -89,7 +89,7 @@ jobs:
           fetch-depth: 0
 
       - name: Create Release Draft
-        uses: 21stdigital/savr-action@v1
+        uses: 21stdigital/savr-action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           # Optional configuration:
