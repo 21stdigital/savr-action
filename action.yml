@@ -27,6 +27,7 @@ inputs:
   release-notes-template:
     description: A template to format the generated release notes
     required: false
+    # Keep this default in sync with src/templates.ts -> DEFAULT_TEMPLATE fallback.
     default: |
       {{#if features}}
       ### ✨ Features

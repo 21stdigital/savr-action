@@ -1,9 +1,94 @@
+import { readFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+
 import { describe, expect, it } from 'vitest'
 
 import { compileReleaseNotes } from '../src/templates.js'
 
+const normalizeTrailingWhitespace = (value: string): string => {
+  return value
+    .split('\n')
+    .map(line => line.replace(/[ \t]+$/u, ''))
+    .join('\n')
+    .trimEnd()
+}
+
+const extractDefaultTemplateFromActionYml = (): string => {
+  const actionYmlPath = fileURLToPath(new URL('../action.yml', import.meta.url))
+  const actionYml = readFileSync(actionYmlPath, 'utf8')
+  const lines = actionYml.split('\n')
+
+  const releaseNotesTemplateIndex = lines.findIndex(line => /^\s{2}release-notes-template:\s*$/u.test(line))
+  if (releaseNotesTemplateIndex === -1) {
+    throw new Error('Could not find "release-notes-template" input in action.yml')
+  }
+
+  const defaultLineIndex = lines.findIndex(
+    (line, index) => index > releaseNotesTemplateIndex && /^\s{4}default:\s*\|\s*$/u.test(line)
+  )
+  if (defaultLineIndex === -1) {
+    throw new Error('Could not find block-scalar default template in action.yml')
+  }
+
+  const templateLines: string[] = []
+  for (const line of lines.slice(defaultLineIndex + 1)) {
+    if (line.length === 0) {
+      templateLines.push('')
+      continue
+    }
+
+    if (!line.startsWith('      ')) {
+      break
+    }
+
+    templateLines.push(line.slice(6))
+  }
+
+  return templateLines.join('\n')
+}
+
 describe('templates', () => {
   describe('compileReleaseNotes', () => {
+    it('should keep fallback default template output in parity with action metadata default template', () => {
+      const metadataTemplate = extractDefaultTemplateFromActionYml()
+      const data = {
+        version: '2.1.0',
+        features: [
+          {
+            type: 'feat',
+            scope: 'checkout',
+            subject: 'add inline promo code support',
+            message: 'feat(checkout): add inline promo code support',
+            breaking: false
+          },
+          { type: 'feat', subject: 'add product wishlist', message: 'feat: add product wishlist', breaking: false }
+        ],
+        fixes: [
+          {
+            type: 'fix',
+            scope: 'api',
+            subject: 'fix timeout retries',
+            message: 'fix(api): fix timeout retries',
+            breaking: false
+          }
+        ],
+        breaking: [
+          {
+            type: 'feat',
+            scope: 'auth',
+            subject: 'remove legacy session endpoints',
+            message: 'feat(auth)!: remove legacy session endpoints',
+            breaking: true
+          }
+        ]
+      }
+
+      const fallbackOutput = compileReleaseNotes('{{#if', data)
+      const metadataOutput = compileReleaseNotes(metadataTemplate, data)
+
+      expect(normalizeTrailingWhitespace(fallbackOutput)).toBe(normalizeTrailingWhitespace(metadataOutput))
+    })
+
     it('should use default template when no template is provided', () => {
       const data = {
         version: '1.0.0',

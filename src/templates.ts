@@ -54,8 +54,8 @@ Handlebars.registerHelper('groupByScope', (commits: Commit[]): GroupedCommits[] 
   return result
 })
 
-const DEFAULT_TEMPLATE = `
-{{#if features}}
+// Keep this fallback template in sync with action.yml -> inputs.release-notes-template.default.
+const DEFAULT_TEMPLATE = `{{#if features}}
 ### ✨ Features
 {{#each (groupByScope features)}}
 #### {{this.scope}}
@@ -65,6 +65,7 @@ const DEFAULT_TEMPLATE = `
 
 {{/each}}
 {{/if}}
+
 {{#if fixes}}
 ### 🐛 Fixes
 {{#each (groupByScope fixes)}}
@@ -75,6 +76,7 @@ const DEFAULT_TEMPLATE = `
 
 {{/each}}
 {{/if}}
+
 {{#if breaking}}
 ### 💥 Breaking Changes
 {{#each (groupByScope breaking)}}
