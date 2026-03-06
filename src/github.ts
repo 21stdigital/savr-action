@@ -140,6 +140,11 @@ const isRetryableError = (err: RetryableGitHubError): boolean => {
     return true
   }
 
+  // GitHub secondary rate limits can return 403 with Retry-After.
+  if (err.status === 403 && getRetryAfterDelayMs(err.response?.headers) != null) {
+    return true
+  }
+
   if (err.code != null && RETRYABLE_NETWORK_CODES.has(err.code)) {
     return true
   }

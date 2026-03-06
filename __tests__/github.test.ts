@@ -717,7 +717,7 @@ describe('github', () => {
   })
 
   describe('withGitHubApiRetry', () => {
-    it.each([401, 403])('does not retry non-retryable status %i', async status => {
+    it.each([401, 403])('does not retry status %i without retry-after header', async status => {
       const request = vi.fn<() => Promise<string>>().mockRejectedValueOnce(
         Object.assign(new Error(`HTTP ${String(status)}`), {
           status
@@ -726,6 +726,22 @@ describe('github', () => {
 
       await expect(withGitHubApiRetry('test.nonRetryable', request)).rejects.toThrow(`HTTP ${String(status)}`)
       expect(request).toHaveBeenCalledTimes(1)
+    })
+
+    it('retries status 403 when retry-after header is present', async () => {
+      const request = vi
+        .fn<() => Promise<string>>()
+        .mockRejectedValueOnce(
+          Object.assign(new Error('secondary rate limit'), {
+            status: 403,
+            response: { headers: { 'retry-after': '0' } }
+          })
+        )
+        .mockResolvedValueOnce('ok')
+
+      await expect(withGitHubApiRetry('test.secondaryRateLimit', request)).resolves.toBe('ok')
+      expect(request).toHaveBeenCalledTimes(2)
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('status 403'))
     })
 
     it('uses HTTP-date retry-after delays and emits operation/status warning', async () => {
