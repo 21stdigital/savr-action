@@ -8,6 +8,14 @@ import { compileReleaseNotes } from './templates.js'
 import { sanitizeLogOutput } from './utils.js'
 import { getLatestVersion, incrementVersion } from './version.js'
 
+interface ReleaseOutputs {
+  skipped: boolean
+  version: string
+  tag: string
+  releaseUrl?: string
+  releaseId?: string
+}
+
 const processCommits = async (githubContext: GitHubContext, head: string, sinceTag?: string) => {
   const commits = await getCommits(githubContext, head, sinceTag)
   info('Retrieved commits:')
@@ -57,14 +65,10 @@ export const run = async (): Promise<void> => {
     throw new Error('Unable to determine repository owner and name from context')
   }
 
+  setOutput('dry-run', dryRun.toString())
+
   const githubContext = { owner, repo, octokit }
-  const setReleaseOutputs = (outputs: {
-    skipped: boolean
-    version: string
-    tag: string
-    releaseUrl?: string
-    releaseId?: string
-  }) => {
+  const setReleaseOutputs = (outputs: ReleaseOutputs) => {
     setOutput('skipped', outputs.skipped.toString())
     setOutput('release-url', outputs.releaseUrl ?? '')
     setOutput('release-id', outputs.releaseId ?? '')

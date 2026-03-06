@@ -68,7 +68,9 @@ inputs:
 # Define your outputs here.
 outputs:
   skipped:
-    description: Indicates whether release creation/update was skipped
+    description: Whether release creation was skipped (true when dry-run, no version bump, or no new commits)
+  dry-run:
+    description: Whether the action ran in dry-run mode
   version:
     description: The calculated version for the release
   tag:

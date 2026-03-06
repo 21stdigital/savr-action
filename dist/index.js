@@ -47560,6 +47560,7 @@ const run = async () => {
     if (!owner || !repo) {
         throw new Error('Unable to determine repository owner and name from context');
     }
+    setOutput('dry-run', dryRun.toString());
     const githubContext = { owner, repo, octokit };
     const setReleaseOutputs = (outputs) => {
         setOutput('skipped', outputs.skipped.toString());
