@@ -47142,8 +47142,9 @@ const COMMIT_REGEX = new RegExp(`^(${COMMIT_TYPES.join('|')})(?:\\(([^)]+)\\))?(
 const parseCommit = (message) => {
     // Sanitize commit message to prevent workflow command injection in debug logs
     core_debug(`Parsing commit message: ${sanitizeLogOutput(message)}`);
-    // Extract only the first line for parsing and display
-    const firstLine = message.split('\n')[0];
+    // Keep first line for conventional commit parsing and retain the rest as body.
+    const [firstLine, ...remainingLines] = message.split(/\r?\n/);
+    const body = remainingLines.join('\n').trim();
     const match = COMMIT_REGEX.exec(firstLine);
     if (!match) {
         warning('Commit message does not match conventional format, defaulting to chore type');
@@ -47151,6 +47152,7 @@ const parseCommit = (message) => {
             type: 'chore',
             subject: firstLine,
             message: firstLine,
+            body,
             breaking: false
         };
     }
@@ -47162,6 +47164,7 @@ const parseCommit = (message) => {
         scope,
         subject,
         message: firstLine,
+        body,
         breaking
     };
 };
