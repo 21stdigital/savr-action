@@ -42,70 +42,10 @@ type RetryableGitHubError = Error & {
   }
 }
 
-const sleep = async (ms: number): Promise<void> => {
-  await new Promise(resolve => setTimeout(resolve, ms))
-}
-
 const getHeaderValue = (
   headers: Record<string, string | number | undefined> | undefined,
   key: string
-): string | undefined => {
-  if (headers == null) {
-    return undefined
-  }
-
-  const directValue = headers[key]
-  if (directValue != null) {
-    return String(directValue)
-  }
-
-  const lowerKey = key.toLowerCase()
-  const matchedEntry = Object.entries(headers).find(([headerKey]) => headerKey.toLowerCase() === lowerKey)
-  if (matchedEntry == null) {
-    return undefined
-  }
-
-  return matchedEntry[1] != null ? String(matchedEntry[1]) : undefined
-}
-
-const getRetryAfterDelayMs = (
-  headers: Record<string, string | number | undefined> | undefined,
-  nowMs = Date.now()
-): number | undefined => {
-  const retryAfter = getHeaderValue(headers, 'retry-after')
-  if (retryAfter == null) {
-    return undefined
-  }
-
-  const retryAfterSeconds = Number.parseFloat(retryAfter)
-  if (!Number.isNaN(retryAfterSeconds) && retryAfterSeconds >= 0) {
-    return Math.round(retryAfterSeconds * 1000)
-  }
-
-  const retryAfterDateMs = Date.parse(retryAfter)
-  if (!Number.isNaN(retryAfterDateMs)) {
-    return Math.max(0, retryAfterDateMs - nowMs)
-  }
-
-  return undefined
-}
-
-const getRateLimitResetDelayMs = (
-  headers: Record<string, string | number | undefined> | undefined,
-  nowMs = Date.now()
-): number | undefined => {
-  const rateLimitReset = getHeaderValue(headers, 'x-ratelimit-reset')
-  if (rateLimitReset == null) {
-    return undefined
-  }
-
-  const resetSeconds = Number.parseInt(rateLimitReset, 10)
-  if (Number.isNaN(resetSeconds) || resetSeconds < 0) {
-    return undefined
-  }
-
-  return Math.max(0, resetSeconds * 1000 - nowMs)
-}
+): string | undefined => (headers?.[key] != null ? String(headers[key]) : undefined)
 
 const applyJitter = (delayMs: number): number => {
   if (delayMs <= 0) {
@@ -118,15 +58,26 @@ const applyJitter = (delayMs: number): number => {
 
 const getRetryDelayMs = (attempt: number, err: RetryableGitHubError): number => {
   const headers = err.response?.headers
-  const retryAfterDelayMs = getRetryAfterDelayMs(headers)
-  if (retryAfterDelayMs != null) {
-    return Math.min(applyJitter(retryAfterDelayMs), MAX_RATE_LIMIT_DELAY_MS)
+  const retryAfter = getHeaderValue(headers, 'retry-after')
+  if (retryAfter != null) {
+    const retryAfterSeconds = Number.parseFloat(retryAfter)
+    if (!Number.isNaN(retryAfterSeconds) && retryAfterSeconds >= 0) {
+      return Math.min(applyJitter(Math.round(retryAfterSeconds * 1000)), MAX_RATE_LIMIT_DELAY_MS)
+    }
+
+    const retryAfterDateMs = Date.parse(retryAfter)
+    if (!Number.isNaN(retryAfterDateMs)) {
+      return Math.min(applyJitter(Math.max(0, retryAfterDateMs - Date.now())), MAX_RATE_LIMIT_DELAY_MS)
+    }
   }
 
   if (err.status === 429) {
-    const rateLimitResetDelayMs = getRateLimitResetDelayMs(headers)
-    if (rateLimitResetDelayMs != null) {
-      return Math.min(applyJitter(rateLimitResetDelayMs), MAX_RATE_LIMIT_DELAY_MS)
+    const rateLimitReset = getHeaderValue(headers, 'x-ratelimit-reset')
+    if (rateLimitReset != null) {
+      const resetSeconds = Number.parseInt(rateLimitReset, 10)
+      if (!Number.isNaN(resetSeconds) && resetSeconds >= 0) {
+        return Math.min(applyJitter(Math.max(0, resetSeconds * 1000 - Date.now())), MAX_RATE_LIMIT_DELAY_MS)
+      }
     }
   }
 
@@ -140,8 +91,11 @@ const isRetryableError = (err: RetryableGitHubError): boolean => {
   }
 
   // GitHub secondary rate limits can return 403 with Retry-After.
-  if (err.status === 403 && getRetryAfterDelayMs(err.response?.headers) != null) {
-    return true
+  if (err.status === 403) {
+    const retryAfter = getHeaderValue(err.response?.headers, 'retry-after')
+    if (retryAfter != null && (!Number.isNaN(Number.parseFloat(retryAfter)) || !Number.isNaN(Date.parse(retryAfter)))) {
+      return true
+    }
   }
 
   if (err.code != null && RETRYABLE_NETWORK_CODES.has(err.code)) {
@@ -170,7 +124,7 @@ export const withGitHubApiRetry = async <T>(operation: string, request: () => Pr
         }; retrying in ${String(delayMs)}ms (${String(retryAttempt)}/${String(MAX_GITHUB_API_RETRIES)})`
       )
 
-      await sleep(delayMs)
+      await new Promise(resolve => setTimeout(resolve, delayMs))
     }
   }
 }
@@ -212,38 +166,33 @@ export const getTags = async (context: GitHubContext): Promise<Tag[]> => {
   let page = 1
   let hasMore = true
 
-  try {
-    while (hasMore) {
-      debug(`Fetching tags page ${String(page)}`)
-      const { data: tags } = await withGitHubApiRetry('repos.listTags', () =>
-        context.octokit.rest.repos.listTags({
-          owner: context.owner,
-          repo: context.repo,
-          per_page: 100,
-          page
-        })
-      )
+  while (hasMore) {
+    debug(`Fetching tags page ${String(page)}`)
+    const { data: tags } = await withGitHubApiRetry('repos.listTags', () =>
+      context.octokit.rest.repos.listTags({
+        owner: context.owner,
+        repo: context.repo,
+        per_page: 100,
+        page
+      })
+    )
 
-      debug(`Found ${String(tags.length)} tags on page ${String(page)}`)
-      allTags.push(
-        ...tags.map(tag => ({
-          name: tag.name,
-          version: tag.name
-        }))
-      )
+    debug(`Found ${String(tags.length)} tags on page ${String(page)}`)
+    allTags.push(
+      ...tags.map(tag => ({
+        name: tag.name,
+        version: tag.name
+      }))
+    )
 
-      hasMore = tags.length === 100
-      if (hasMore) {
-        page++
-      }
+    hasMore = tags.length === 100
+    if (hasMore) {
+      page++
     }
-
-    info(`Found ${String(allTags.length)} total tags`)
-    return allTags
-  } catch (err) {
-    error(`Failed to fetch tags: ${err instanceof Error ? err.message : String(err)}`)
-    throw err
   }
+
+  info(`Found ${String(allTags.length)} total tags`)
+  return allTags
 }
 
 export const getCommits = async (context: GitHubContext, head: string, sinceTag?: string): Promise<Commit[]> => {
@@ -254,80 +203,58 @@ export const getCommits = async (context: GitHubContext, head: string, sinceTag?
   let hasMore = true
   let foundSinceTag = false
 
-  try {
-    while (hasMore) {
-      debug(`Fetching commits page ${String(page)}`)
-      const { data: pageCommits } = await withGitHubApiRetry('repos.listCommits', () =>
-        context.octokit.rest.repos.listCommits({
-          owner: context.owner,
-          repo: context.repo,
-          sha: head,
-          per_page: 100,
-          page
-        })
-      )
+  while (hasMore) {
+    debug(`Fetching commits page ${String(page)}`)
+    const { data: pageCommits } = await withGitHubApiRetry('repos.listCommits', () =>
+      context.octokit.rest.repos.listCommits({
+        owner: context.owner,
+        repo: context.repo,
+        sha: head,
+        per_page: 100,
+        page
+      })
+    )
 
-      debug(`Found ${String(pageCommits.length)} commits on page ${String(page)}`)
-      // If we have a sinceTag, stop when we reach it
-      if (sinceTag && pageCommits.some(commit => commit.sha === sinceTag)) {
-        info(`Reached target tag ${sinceTag}, stopping commit fetch`)
-        foundSinceTag = true
-        // Only include commits up to but not including the tag's commit
-        const commitsUpToTag = pageCommits.slice(
-          0,
-          pageCommits.findIndex(commit => commit.sha === sinceTag)
-        )
-        commits.push(...commitsUpToTag.map(commit => parseCommit(commit.commit.message)))
-        hasMore = false
-      } else {
-        commits.push(...pageCommits.map(commit => parseCommit(commit.commit.message)))
-        hasMore = pageCommits.length === 100
-        if (hasMore) {
-          page++
-        }
+    debug(`Found ${String(pageCommits.length)} commits on page ${String(page)}`)
+    // If we have a sinceTag, stop when we reach it
+    if (sinceTag && pageCommits.some(commit => commit.sha === sinceTag)) {
+      info(`Reached target tag ${sinceTag}, stopping commit fetch`)
+      foundSinceTag = true
+      // Only include commits up to but not including the tag's commit
+      const commitsUpToTag = pageCommits.slice(
+        0,
+        pageCommits.findIndex(commit => commit.sha === sinceTag)
+      )
+      commits.push(...commitsUpToTag.map(commit => parseCommit(commit.commit.message)))
+      hasMore = false
+    } else {
+      commits.push(...pageCommits.map(commit => parseCommit(commit.commit.message)))
+      hasMore = pageCommits.length === 100
+      if (hasMore) {
+        page++
       }
     }
-
-    if (sinceTag && !foundSinceTag) {
-      throw new Error(`Unable to find target tag commit ${sinceTag} in history for head ${head}`)
-    }
-
-    info(`Total commits retrieved: ${String(commits.length)}`)
-    return commits
-  } catch (err) {
-    error(`Failed to fetch commits: ${err instanceof Error ? err.message : String(err)}`)
-    throw err
   }
+
+  if (sinceTag && !foundSinceTag) {
+    throw new Error(`Unable to find target tag commit ${sinceTag} in history for head ${head}`)
+  }
+
+  info(`Total commits retrieved: ${String(commits.length)}`)
+  return commits
 }
 
 export const deleteRelease = async (context: GitHubContext, releaseId: number): Promise<void> => {
   debug(`Deleting release with ID ${String(releaseId)}`)
 
-  try {
-    await withGitHubApiRetry('repos.deleteRelease', () =>
-      context.octokit.rest.repos.deleteRelease({
-        owner: context.owner,
-        repo: context.repo,
-        release_id: releaseId
-      })
-    )
-    info(`Release with ID ${String(releaseId)} deleted successfully`)
-  } catch (err) {
-    error(`Failed to delete release: ${err instanceof Error ? err.message : String(err)}`)
-    throw err
-  }
-}
-
-const formatCleanupDeletionError = (err: unknown): string => {
-  if (err instanceof Error) {
-    const cleanupError = err as RetryableGitHubError
-    const status = cleanupError.status != null ? `status ${String(cleanupError.status)}` : undefined
-    const code = cleanupError.code != null ? `code ${cleanupError.code}` : undefined
-
-    return [status, code, err.message].filter(part => part != null && part.length > 0).join(', ')
-  }
-
-  return String(err)
+  await withGitHubApiRetry('repos.deleteRelease', () =>
+    context.octokit.rest.repos.deleteRelease({
+      owner: context.owner,
+      repo: context.repo,
+      release_id: releaseId
+    })
+  )
+  info(`Release with ID ${String(releaseId)} deleted successfully`)
 }
 
 interface ReleaseDraftSummary {
@@ -470,10 +397,22 @@ export const createOrUpdateRelease = async (
             continue
           }
 
+          const deletionDetails =
+            deletionError instanceof Error
+              ? (() => {
+                  const cleanupError = deletionError as RetryableGitHubError
+                  return [
+                    cleanupError.status != null ? `status ${String(cleanupError.status)}` : undefined,
+                    cleanupError.code != null ? `code ${cleanupError.code}` : undefined,
+                    deletionError.message
+                  ]
+                    .filter(part => part != null && part.length > 0)
+                    .join(', ')
+                })()
+              : String(deletionError)
+
           warning(
-            `Failed to delete old draft release ${oldDraft.tag_name} (ID: ${String(oldDraft.id)}): ${formatCleanupDeletionError(
-              deletionError
-            )}`
+            `Failed to delete old draft release ${oldDraft.tag_name} (ID: ${String(oldDraft.id)}): ${deletionDetails}`
           )
         }
       }
