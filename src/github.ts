@@ -8,7 +8,9 @@ export const SAVR_MARKER = '<!-- savr-managed-release -->'
 
 const MAX_GITHUB_API_RETRIES = 3
 const INITIAL_RETRY_DELAY_MS = 500
-const MAX_RETRY_DELAY_MS = 5000
+const MAX_RETRY_DELAY_MS = 10_000
+const MAX_RATE_LIMIT_DELAY_MS = 120_000
+const MAX_JITTER_MS = 250
 
 const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504])
 const RETRYABLE_NETWORK_CODES = new Set([
@@ -45,17 +47,92 @@ const sleep = async (ms: number): Promise<void> => {
   await new Promise(resolve => setTimeout(resolve, ms))
 }
 
+const getHeaderValue = (
+  headers: Record<string, string | number | undefined> | undefined,
+  key: string
+): string | undefined => {
+  if (headers == null) {
+    return undefined
+  }
+
+  const directValue = headers[key]
+  if (directValue != null) {
+    return String(directValue)
+  }
+
+  const lowerKey = key.toLowerCase()
+  const matchedEntry = Object.entries(headers).find(([headerKey]) => headerKey.toLowerCase() === lowerKey)
+  if (matchedEntry == null) {
+    return undefined
+  }
+
+  return matchedEntry[1] != null ? String(matchedEntry[1]) : undefined
+}
+
+const getRetryAfterDelayMs = (
+  headers: Record<string, string | number | undefined> | undefined,
+  nowMs = Date.now()
+): number | undefined => {
+  const retryAfter = getHeaderValue(headers, 'retry-after')
+  if (retryAfter == null) {
+    return undefined
+  }
+
+  const retryAfterSeconds = Number.parseFloat(retryAfter)
+  if (!Number.isNaN(retryAfterSeconds) && retryAfterSeconds >= 0) {
+    return Math.round(retryAfterSeconds * 1000)
+  }
+
+  const retryAfterDateMs = Date.parse(retryAfter)
+  if (!Number.isNaN(retryAfterDateMs)) {
+    return Math.max(0, retryAfterDateMs - nowMs)
+  }
+
+  return undefined
+}
+
+const getRateLimitResetDelayMs = (
+  headers: Record<string, string | number | undefined> | undefined,
+  nowMs = Date.now()
+): number | undefined => {
+  const rateLimitReset = getHeaderValue(headers, 'x-ratelimit-reset')
+  if (rateLimitReset == null) {
+    return undefined
+  }
+
+  const resetSeconds = Number.parseInt(rateLimitReset, 10)
+  if (Number.isNaN(resetSeconds) || resetSeconds < 0) {
+    return undefined
+  }
+
+  return Math.max(0, resetSeconds * 1000 - nowMs)
+}
+
+const applyJitter = (delayMs: number): number => {
+  if (delayMs <= 0) {
+    return 0
+  }
+
+  const jitterMs = Math.round(Math.random() * Math.min(MAX_JITTER_MS, Math.ceil(delayMs * 0.2)))
+  return delayMs + jitterMs
+}
+
 const getRetryDelayMs = (attempt: number, err: RetryableGitHubError): number => {
-  const retryAfter = err.response?.headers?.['retry-after']
-  if (retryAfter != null) {
-    const retryAfterSeconds = Number.parseFloat(String(retryAfter))
-    if (!Number.isNaN(retryAfterSeconds) && retryAfterSeconds >= 0) {
-      return Math.min(Math.round(retryAfterSeconds * 1000), MAX_RETRY_DELAY_MS)
+  const headers = err.response?.headers
+  const retryAfterDelayMs = getRetryAfterDelayMs(headers)
+  if (retryAfterDelayMs != null) {
+    return Math.min(applyJitter(retryAfterDelayMs), MAX_RATE_LIMIT_DELAY_MS)
+  }
+
+  if (err.status === 429) {
+    const rateLimitResetDelayMs = getRateLimitResetDelayMs(headers)
+    if (rateLimitResetDelayMs != null) {
+      return Math.min(applyJitter(rateLimitResetDelayMs), MAX_RATE_LIMIT_DELAY_MS)
     }
   }
 
   const exponentialDelay = INITIAL_RETRY_DELAY_MS * 2 ** (attempt - 1)
-  return Math.min(exponentialDelay, MAX_RETRY_DELAY_MS)
+  return Math.min(applyJitter(exponentialDelay), MAX_RETRY_DELAY_MS)
 }
 
 const isRetryableError = (err: RetryableGitHubError): boolean => {

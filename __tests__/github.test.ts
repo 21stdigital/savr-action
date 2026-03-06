@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { warning } from '@actions/core'
 
 import {
   createOrUpdateRelease,
@@ -9,6 +10,13 @@ import {
   SAVR_MARKER,
   withGitHubApiRetry
 } from '../src/github.js'
+
+vi.mock('@actions/core', () => ({
+  debug: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn()
+}))
 
 describe('github', () => {
   const mockOctokit = {
@@ -709,6 +717,76 @@ describe('github', () => {
   })
 
   describe('withGitHubApiRetry', () => {
+    it.each([401, 403])('does not retry non-retryable status %i', async status => {
+      const request = vi.fn<() => Promise<string>>().mockRejectedValueOnce(
+        Object.assign(new Error(`HTTP ${String(status)}`), {
+          status
+        })
+      )
+
+      await expect(withGitHubApiRetry('test.nonRetryable', request)).rejects.toThrow(`HTTP ${String(status)}`)
+      expect(request).toHaveBeenCalledTimes(1)
+    })
+
+    it('uses HTTP-date retry-after delays and emits operation/status warning', async () => {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout')
+      const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0)
+
+      const request = vi
+        .fn<() => Promise<string>>()
+        .mockRejectedValueOnce(
+          Object.assign(new Error('rate limited'), {
+            status: 429,
+            response: { headers: { 'retry-after': 'Thu, 01 Jan 2026 00:00:02 GMT' } }
+          })
+        )
+        .mockResolvedValueOnce('ok')
+
+      const promise = withGitHubApiRetry('repos.listTags', request)
+      await vi.advanceTimersByTimeAsync(2000)
+      await expect(promise).resolves.toBe('ok')
+
+      expect(request).toHaveBeenCalledTimes(2)
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 2000)
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('repos.listTags'))
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('status 429'))
+
+      randomSpy.mockRestore()
+      setTimeoutSpy.mockRestore()
+      vi.useRealTimers()
+    })
+
+    it('uses x-ratelimit-reset delays for rate-limit responses', async () => {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout')
+      const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0)
+
+      const request = vi
+        .fn<() => Promise<string>>()
+        .mockRejectedValueOnce(
+          Object.assign(new Error('rate limited'), {
+            status: 429,
+            response: { headers: { 'x-ratelimit-reset': String(Math.floor(Date.parse('2026-01-01T00:01:30.000Z') / 1000)) } }
+          })
+        )
+        .mockResolvedValueOnce('ok')
+
+      const promise = withGitHubApiRetry('repos.listCommits', request)
+      await vi.advanceTimersByTimeAsync(90_000)
+      await expect(promise).resolves.toBe('ok')
+
+      expect(request).toHaveBeenCalledTimes(2)
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 90_000)
+      expect(Number(setTimeoutSpy.mock.calls[0]?.[1])).toBeGreaterThan(10_000)
+
+      randomSpy.mockRestore()
+      setTimeoutSpy.mockRestore()
+      vi.useRealTimers()
+    })
+
     it('retries network failures with retryable error codes', async () => {
       const request = vi
         .fn<() => Promise<string>>()
