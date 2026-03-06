@@ -56,7 +56,7 @@ Handlebars.registerHelper('groupByScope', (commits: Commit[]): GroupedCommits[] 
 
 const DEFAULT_TEMPLATE = `
 {{#if features}}
-### Features
+### ✨ Features
 {{#each (groupByScope features)}}
 #### {{this.scope}}
 {{#each this.commits}}
@@ -66,7 +66,7 @@ const DEFAULT_TEMPLATE = `
 {{/each}}
 {{/if}}
 {{#if fixes}}
-### Fixes
+### 🐛 Fixes
 {{#each (groupByScope fixes)}}
 #### {{this.scope}}
 {{#each this.commits}}
@@ -76,7 +76,7 @@ const DEFAULT_TEMPLATE = `
 {{/each}}
 {{/if}}
 {{#if breaking}}
-### Breaking Changes
+### 💥 Breaking Changes
 {{#each (groupByScope breaking)}}
 #### {{this.scope}}
 {{#each this.commits}}
