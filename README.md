@@ -140,47 +140,42 @@ Release notes are automatically generated and include:
 - Bug fixes
 - Breaking changes
 
-The default template groups commits by scope using a built-in `groupByScope` Handlebars helper:
+The default template (from `action.yml`) uses the built-in `groupByScope` Handlebars helper:
 
-```handlebars
-{{#if features}}
+```yaml
+release-notes-template: |
+  {{#if features}}
   ### ✨ Features
   {{#each (groupByScope features)}}
-    ####
-    {{this.scope}}
-    {{#each this.commits}}
-      -
-      {{this.subject}}
-    {{/each}}
+  #### {{this.scope}}
+  {{#each this.commits}}
+  - {{this.subject}}
+  {{/each}}
 
   {{/each}}
-{{/if}}
+  {{/if}}
 
-{{#if fixes}}
+  {{#if fixes}}
   ### 🐛 Fixes
   {{#each (groupByScope fixes)}}
-    ####
-    {{this.scope}}
-    {{#each this.commits}}
-      -
-      {{this.subject}}
-    {{/each}}
+  #### {{this.scope}}
+  {{#each this.commits}}
+  - {{this.subject}}
+  {{/each}}
 
   {{/each}}
-{{/if}}
+  {{/if}}
 
-{{#if breaking}}
+  {{#if breaking}}
   ### 💥 Breaking Changes
   {{#each (groupByScope breaking)}}
-    ####
-    {{this.scope}}
-    {{#each this.commits}}
-      -
-      {{this.subject}}
-    {{/each}}
+  #### {{this.scope}}
+  {{#each this.commits}}
+  - {{this.subject}}
+  {{/each}}
 
   {{/each}}
-{{/if}}
+  {{/if}}
 ```
 
 ### Custom Templates

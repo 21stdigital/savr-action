@@ -47237,6 +47237,7 @@ const getCommits = async (context, head, sinceTag) => {
     const commits = [];
     let page = 1;
     let hasMore = true;
+    let foundSinceTag = false;
     try {
         while (hasMore) {
             core_debug(`Fetching commits page ${String(page)}`);
@@ -47251,6 +47252,7 @@ const getCommits = async (context, head, sinceTag) => {
             // If we have a sinceTag, stop when we reach it
             if (sinceTag && pageCommits.some(commit => commit.sha === sinceTag)) {
                 info(`Reached target tag ${sinceTag}, stopping commit fetch`);
+                foundSinceTag = true;
                 // Only include commits up to but not including the tag's commit
                 const commitsUpToTag = pageCommits.slice(0, pageCommits.findIndex(commit => commit.sha === sinceTag));
                 commits.push(...commitsUpToTag.map(commit => parseCommit(commit.commit.message)));
@@ -47263,6 +47265,9 @@ const getCommits = async (context, head, sinceTag) => {
                     page++;
                 }
             }
+        }
+        if (sinceTag && !foundSinceTag) {
+            throw new Error(`Unable to find target tag commit ${sinceTag} in history for head ${head}`);
         }
         info(`Total commits retrieved: ${String(commits.length)}`);
         return commits;

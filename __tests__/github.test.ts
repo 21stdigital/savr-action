@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { createOrUpdateRelease, deleteRelease, type GitHubContext, SAVR_MARKER } from '../src/github.js'
+import { createOrUpdateRelease, deleteRelease, getCommits, type GitHubContext, SAVR_MARKER } from '../src/github.js'
 
 describe('github', () => {
   const mockOctokit = {
     rest: {
       repos: {
+        listCommits: vi.fn(),
         listReleases: vi.fn(),
         createRelease: vi.fn(),
         updateRelease: vi.fn(),
@@ -414,6 +415,37 @@ describe('github', () => {
         repo: 'test-repo',
         release_id: 1
       })
+    })
+  })
+
+  describe('getCommits', () => {
+    it('should include commits up to but excluding sinceTag commit', async () => {
+      mockOctokit.rest.repos.listCommits.mockResolvedValue({
+        data: [
+          { sha: 'head-1', commit: { message: 'feat: first change' } },
+          { sha: 'head-2', commit: { message: 'fix: second change' } },
+          { sha: 'tag-sha', commit: { message: 'chore: tagged release' } }
+        ]
+      })
+
+      const commits = await getCommits(githubContext, 'head-1', 'tag-sha')
+
+      expect(commits).toHaveLength(2)
+      expect(commits[0]).toMatchObject({ type: 'feat', subject: 'first change' })
+      expect(commits[1]).toMatchObject({ type: 'fix', subject: 'second change' })
+    })
+
+    it('should throw when sinceTag commit is not reachable from head history', async () => {
+      mockOctokit.rest.repos.listCommits.mockResolvedValue({
+        data: [
+          { sha: 'head-1', commit: { message: 'feat: first change' } },
+          { sha: 'head-2', commit: { message: 'fix: second change' } }
+        ]
+      })
+
+      await expect(getCommits(githubContext, 'head-1', 'missing-tag-sha')).rejects.toThrow(
+        'Unable to find target tag commit missing-tag-sha in history for head head-1'
+      )
     })
   })
 })
