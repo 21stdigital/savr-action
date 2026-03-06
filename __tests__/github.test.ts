@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { warning } from '@actions/core'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   createOrUpdateRelease,

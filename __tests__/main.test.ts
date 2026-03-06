@@ -28,6 +28,20 @@ vi.mock('../src/version.js')
 vi.mock('../src/templates.js')
 
 describe('main', () => {
+  interface GitRefData {
+    object: {
+      sha: string
+      type?: string
+    }
+  }
+
+  interface AnnotatedTagData {
+    object: {
+      sha: string
+      type: string
+    }
+  }
+
   const baseInputs = {
     'github-token': 'token',
     'tag-prefix': 'v',
@@ -77,13 +91,23 @@ describe('main', () => {
     ;(getOctokit as Mock).mockReturnValue(mockOctokit)
     ;(getLatestVersion as Mock).mockReturnValue(undefined)
     ;(determineVersionBump as Mock).mockReturnValue(null)
-    ;(getGitRef as Mock).mockImplementation(
-      async (_context: unknown, ref: string) =>
-        (await mockOctokit.rest.git.getRef({ owner: 'owner', repo: 'repo', ref })).data
-    )
+    ;(getGitRef as Mock).mockImplementation(async (_context: unknown, ref: string): Promise<GitRefData> => {
+      const response = (await mockOctokit.rest.git.getRef({
+        owner: 'owner',
+        repo: 'repo',
+        ref
+      })) as { data: GitRefData }
+      return response.data
+    })
     ;(getAnnotatedTag as Mock).mockImplementation(
-      async (_context: unknown, tagSha: string) =>
-        (await mockOctokit.rest.git.getTag({ owner: 'owner', repo: 'repo', tag_sha: tagSha })).data
+      async (_context: unknown, tagSha: string): Promise<AnnotatedTagData> => {
+        const response = (await mockOctokit.rest.git.getTag({
+          owner: 'owner',
+          repo: 'repo',
+          tag_sha: tagSha
+        })) as { data: AnnotatedTagData }
+        return response.data
+      }
     )
   })
 
