@@ -47207,7 +47207,6 @@ const MAX_GITHUB_API_RETRIES = 3;
 const INITIAL_RETRY_DELAY_MS = 500;
 const MAX_RETRY_DELAY_MS = 10_000;
 const MAX_RATE_LIMIT_DELAY_MS = 120_000;
-const MAX_JITTER_MS = 250;
 const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504]);
 const RETRYABLE_NETWORK_CODES = new Set([
     'ECONNABORTED',
@@ -47266,8 +47265,8 @@ const applyJitter = (delayMs) => {
     if (delayMs <= 0) {
         return 0;
     }
-    const jitterMs = Math.round(Math.random() * Math.min(MAX_JITTER_MS, Math.ceil(delayMs * 0.2)));
-    return delayMs + jitterMs;
+    // Full jitter distributes retries across the full delay window.
+    return Math.round(Math.random() * delayMs);
 };
 const getRetryDelayMs = (attempt, err) => {
     const headers = err.response?.headers;
@@ -47309,10 +47308,26 @@ const withGitHubApiRetry = async (operation, request) => {
             }
             const retryAttempt = attempt + 1;
             const delayMs = getRetryDelayMs(retryAttempt, err);
-            warning(`GitHub API request failed during ${operation} with ${err.status != null ? `status ${String(err.status)}` : err.code ?? 'unknown error'}; retrying in ${String(delayMs)}ms (${String(retryAttempt)}/${String(MAX_GITHUB_API_RETRIES)})`);
+            warning(`GitHub API request failed during ${operation} with ${err.status != null ? `status ${String(err.status)}` : (err.code ?? 'unknown error')}; retrying in ${String(delayMs)}ms (${String(retryAttempt)}/${String(MAX_GITHUB_API_RETRIES)})`);
             await sleep(delayMs);
         }
     }
+};
+const getGitRef = async (context, ref) => {
+    const { data } = await withGitHubApiRetry(`git.getRef(${ref})`, () => context.octokit.rest.git.getRef({
+        owner: context.owner,
+        repo: context.repo,
+        ref
+    }));
+    return data;
+};
+const getAnnotatedTag = async (context, tagSha) => {
+    const { data } = await withGitHubApiRetry(`git.getTag(${tagSha})`, () => context.octokit.rest.git.getTag({
+        owner: context.owner,
+        repo: context.repo,
+        tag_sha: tagSha
+    }));
+    return data;
 };
 const getTags = async (context) => {
     core_debug(`Fetching tags for repository ${context.owner}/${context.repo}`);
@@ -47740,7 +47755,7 @@ const run = async () => {
         info(`No existing tags found. Starting from version ${initialVersion}`);
         const tagName = `${tagPrefix}${initialVersion}`;
         const releaseName = initialVersion;
-        const { data: headRef } = await withGitHubApiRetry(`git.getRef(heads/${releaseBranch})`, () => octokit.rest.git.getRef({ owner, repo, ref: `heads/${releaseBranch}` }));
+        const headRef = await getGitRef(githubContext, `heads/${releaseBranch}`);
         const { categorizedCommits } = await processCommits(githubContext, headRef.object.sha);
         const releaseNotes = compileReleaseNotes(releaseNotesTemplate, {
             version: initialVersion,
@@ -47769,15 +47784,11 @@ const run = async () => {
         });
         return;
     }
-    const { data: tagData } = await withGitHubApiRetry(`git.getRef(tags/${latestTag.name})`, () => octokit.rest.git.getRef({ owner, repo, ref: `tags/${latestTag.name}` }));
-    const { data: headData } = await withGitHubApiRetry(`git.getRef(heads/${releaseBranch})`, () => octokit.rest.git.getRef({ owner, repo, ref: `heads/${releaseBranch}` }));
+    const tagData = await getGitRef(githubContext, `tags/${latestTag.name}`);
+    const headData = await getGitRef(githubContext, `heads/${releaseBranch}`);
     let latestTagCommitSha = tagData.object.sha;
     if (tagData.object.type === 'tag') {
-        const { data: annotatedTagData } = await withGitHubApiRetry(`git.getTag(${tagData.object.sha})`, () => octokit.rest.git.getTag({
-            owner,
-            repo,
-            tag_sha: tagData.object.sha
-        }));
+        const annotatedTagData = await getAnnotatedTag(githubContext, tagData.object.sha);
         if (annotatedTagData.object.type !== 'commit') {
             throw new Error(`Latest tag ${latestTag.name} does not reference a commit (found: ${annotatedTagData.object.type})`);
         }
