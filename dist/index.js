@@ -47191,7 +47191,12 @@ const determineVersionBump = (categorizedCommits) => {
                 ? 'patch'
                 : undefined;
     if (versionBump) {
-        info(`Version bump required: ${versionBump}`);
+        const versionBumpMessage = versionBump === 'major'
+            ? 'Breaking changes detected - major version bump required'
+            : versionBump === 'minor'
+                ? 'New features detected - minor version bump required'
+                : 'Bug fixes detected - patch version bump required';
+        info(versionBumpMessage);
     }
     else {
         core_debug('No version bump required');
