@@ -12,46 +12,31 @@ interface GroupedCommits {
   commits: Commit[]
 }
 
-// Convert scope to title case (e.g., "main-navigation" -> "Main Navigation")
-const toTitleCase = (scope: string): string => {
-  return scope
-    .split(/[-_]/)
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
-    .join(' ')
-}
-
 // Register Handlebars helper to group commits by scope
 Handlebars.registerHelper('groupByScope', (commits: Commit[]): GroupedCommits[] => {
   const grouped = new Map<string, Commit[]>()
 
   // Group commits by scope
   for (const commit of commits) {
-    const scope = toTitleCase(commit.scope ?? 'General')
+    const scope = (commit.scope ?? 'General')
+      .split(/[-_]/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ')
+
     if (!grouped.has(scope)) {
       grouped.set(scope, [])
     }
-    const scopeCommits = grouped.get(scope)
-    if (scopeCommits) {
-      scopeCommits.push(commit)
-    }
+    grouped.get(scope)?.push(commit)
   }
 
   // Convert to array and sort: General last, others alphabetically
-  const result: GroupedCommits[] = []
-  const sortedScopes = Array.from(grouped.keys()).sort((a, b) => {
-    if (a === 'General') return 1
-    if (b === 'General') return -1
-    return a.localeCompare(b)
-  })
-
-  for (const scope of sortedScopes) {
-    const commits = grouped.get(scope)
-    if (commits) {
-      result.push({ scope, commits })
-    }
-  }
-
-  return result
+  return Array.from(grouped.keys())
+    .sort((a, b) => {
+      if (a === 'General') return 1
+      if (b === 'General') return -1
+      return a.localeCompare(b)
+    })
+    .map(scope => ({ scope, commits: grouped.get(scope) ?? [] }))
 })
 
 // Keep this fallback template in sync with action.yml -> inputs.release-notes-template.default.
@@ -89,11 +74,6 @@ const DEFAULT_TEMPLATE = `{{#if features}}
 {{/if}}
 `
 
-const renderReleaseNotes = (template: string, data: ReleaseNotesData): string => {
-  const compiledTemplate = Handlebars.compile(template)
-  return compiledTemplate(data)
-}
-
 export const compileReleaseNotes = (template: string, data: ReleaseNotesData): string => {
   debug(`Compiling release notes for version ${data.version}`)
   debug(`Template statistics:
@@ -104,13 +84,13 @@ export const compileReleaseNotes = (template: string, data: ReleaseNotesData): s
   const hasCustomTemplate = template && template.trim() !== ''
 
   if (!hasCustomTemplate) {
-    const releaseNotes = renderReleaseNotes(DEFAULT_TEMPLATE, data)
+    const releaseNotes = Handlebars.compile(DEFAULT_TEMPLATE)(data)
     info('Release notes compiled successfully')
     return releaseNotes
   }
 
   try {
-    const releaseNotes = renderReleaseNotes(template, data)
+    const releaseNotes = Handlebars.compile(template)(data)
     info('Release notes compiled successfully')
     return releaseNotes
   } catch (err) {
@@ -119,7 +99,7 @@ export const compileReleaseNotes = (template: string, data: ReleaseNotesData): s
     )
 
     try {
-      const releaseNotes = renderReleaseNotes(DEFAULT_TEMPLATE, data)
+      const releaseNotes = Handlebars.compile(DEFAULT_TEMPLATE)(data)
       info('Release notes compiled successfully with fallback default template')
       return releaseNotes
     } catch (fallbackError) {
