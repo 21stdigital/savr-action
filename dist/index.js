@@ -47561,6 +47561,13 @@ const run = async () => {
         throw new Error('Unable to determine repository owner and name from context');
     }
     const githubContext = { owner, repo, octokit };
+    const setReleaseOutputs = (outputs) => {
+        setOutput('skipped', outputs.skipped.toString());
+        setOutput('release-url', outputs.releaseUrl ?? '');
+        setOutput('release-id', outputs.releaseId ?? '');
+        setOutput('version', outputs.version);
+        setOutput('tag', outputs.tag);
+    };
     const tags = await getTags(githubContext);
     const latestTag = getLatestVersion(tags, tagPrefix);
     if (latestTag == null) {
@@ -47579,13 +47586,21 @@ const run = async () => {
             info('Release notes:');
             // Sanitize release notes to prevent workflow command injection
             info(sanitizeLogOutput(releaseNotes));
+            setReleaseOutputs({
+                skipped: true,
+                version: initialVersion,
+                tag: tagName
+            });
             return;
         }
         const release = await createOrUpdateRelease(githubContext, tagName, releaseName, releaseNotes);
-        setOutput('release-url', release.url);
-        setOutput('release-id', release.id.toString());
-        setOutput('version', initialVersion);
-        setOutput('tag', release.tagName);
+        setReleaseOutputs({
+            skipped: false,
+            releaseUrl: release.url,
+            releaseId: release.id.toString(),
+            version: initialVersion,
+            tag: release.tagName
+        });
         return;
     }
     const { data: tagData } = await octokit.rest.git.getRef({ owner, repo, ref: `tags/${latestTag.name}` });
@@ -47611,6 +47626,11 @@ const run = async () => {
     // If HEAD and tag point to the same commit, there are no new commits to process
     if (headData.object.sha === latestTagCommitSha) {
         info('HEAD and latest tag point to the same commit - no changes to release');
+        setReleaseOutputs({
+            skipped: true,
+            version: latestTag.version,
+            tag: latestTag.name
+        });
         return;
     }
     const { categorizedCommits } = await processCommits(githubContext, headData.object.sha, latestTagCommitSha);
@@ -47618,6 +47638,11 @@ const run = async () => {
     const versionBump = determineVersionBump(categorizedCommits);
     if (versionBump == null) {
         info('No version bump needed - skipping release creation');
+        setReleaseOutputs({
+            skipped: true,
+            version: latestTag.version,
+            tag: latestTag.name
+        });
         return;
     }
     newVersion = incrementVersion(newVersion, versionBump);
@@ -47631,15 +47656,23 @@ const run = async () => {
         info('Release notes:');
         // Sanitize release notes to prevent workflow command injection
         info(sanitizeLogOutput(releaseNotes));
+        setReleaseOutputs({
+            skipped: true,
+            version: newVersion,
+            tag: `${tagPrefix}${newVersion}`
+        });
         return;
     }
     const tagName = `${tagPrefix}${newVersion}`;
     const releaseName = newVersion;
     const release = await createOrUpdateRelease(githubContext, tagName, releaseName, releaseNotes, headData.object.sha);
-    setOutput('release-url', release.url);
-    setOutput('release-id', release.id.toString());
-    setOutput('version', newVersion);
-    setOutput('tag', release.tagName);
+    setReleaseOutputs({
+        skipped: false,
+        releaseUrl: release.url,
+        releaseId: release.id.toString(),
+        version: newVersion,
+        tag: release.tagName
+    });
 };
 
 ;// CONCATENATED MODULE: ./src/index.ts
