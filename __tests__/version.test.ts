@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { getLatestVersion, incrementVersion } from '../src/version/index.js'
+import { getLatestVersion, incrementVersion } from '../src/version.js'
 
 describe('version', () => {
   describe('incrementVersion', () => {

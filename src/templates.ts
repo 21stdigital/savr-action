@@ -1,7 +1,7 @@
 import { debug, error, info, warning } from '@actions/core'
 import Handlebars from 'handlebars'
 
-import { CategorizedCommits, Commit } from '../commits/index.js'
+import { CategorizedCommits, Commit } from './commits.js'
 
 export interface ReleaseNotesData extends CategorizedCommits {
   version: string

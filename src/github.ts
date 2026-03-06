@@ -1,8 +1,8 @@
 import { debug, error, info, warning } from '@actions/core'
 import { getOctokit } from '@actions/github'
 
-import { Commit, parseCommit } from '../commits/index.js'
-import { Tag } from '../version/index.js'
+import { Commit, parseCommit } from './commits.js'
+import { Tag } from './version.js'
 
 export const SAVR_MARKER = '<!-- savr-managed-release -->'
 

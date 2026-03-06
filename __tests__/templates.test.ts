@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { compileReleaseNotes } from '../src/templates/index.js'
+import { compileReleaseNotes } from '../src/templates.js'
 
 describe('templates', () => {
   describe('compileReleaseNotes', () => {

@@ -1,7 +1,7 @@
 import { debug, info, warning } from '@actions/core'
 
-import { sanitizeLogOutput } from '../utils/index.js'
-import { VersionType } from '../version/index.js'
+import { sanitizeLogOutput } from './utils.js'
+import { VersionType } from './version.js'
 
 export interface Commit {
   type: string

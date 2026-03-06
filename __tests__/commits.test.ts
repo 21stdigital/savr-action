@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { categorizeCommits, determineVersionBump, parseCommit } from '../src/commits/index.js'
+import { categorizeCommits, determineVersionBump, parseCommit } from '../src/commits.js'
 
 describe('commits', () => {
   describe('parseCommit', () => {

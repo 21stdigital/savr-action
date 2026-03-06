@@ -2,11 +2,11 @@ import { getBooleanInput, getInput, info, setOutput } from '@actions/core'
 import { context, getOctokit } from '@actions/github'
 import { valid } from 'semver'
 
-import { categorizeCommits, determineVersionBump } from './commits/index.js'
-import { createOrUpdateRelease, getCommits, getTags, type GitHubContext } from './github/index.js'
-import { compileReleaseNotes } from './templates/index.js'
-import { sanitizeLogOutput } from './utils/index.js'
-import { getLatestVersion, incrementVersion } from './version/index.js'
+import { categorizeCommits, determineVersionBump } from './commits.js'
+import { createOrUpdateRelease, getCommits, getTags, type GitHubContext } from './github.js'
+import { compileReleaseNotes } from './templates.js'
+import { sanitizeLogOutput } from './utils.js'
+import { getLatestVersion, incrementVersion } from './version.js'
 
 const processCommits = async (githubContext: GitHubContext, head: string, sinceTag?: string) => {
   const commits = await getCommits(githubContext, head, sinceTag)
@@ -41,7 +41,9 @@ export const run = async (): Promise<void> => {
   }
 
   if (!/^[a-zA-Z0-9._\-/]*$/.test(tagPrefix)) {
-    throw new Error(`tag-prefix contains invalid characters: "${tagPrefix}". Only alphanumeric, dots, hyphens, underscores, and slashes are allowed`)
+    throw new Error(
+      `tag-prefix contains invalid characters: "${tagPrefix}". Only alphanumeric, dots, hyphens, underscores, and slashes are allowed`
+    )
   }
 
   if (!releaseBranch.trim()) {
