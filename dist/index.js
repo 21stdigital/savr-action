@@ -47160,20 +47160,25 @@ const categorizeCommits = (commits) => {
 };
 const determineVersionBump = (categorizedCommits) => {
     core_debug('Determining version bump based on categorized commits');
-    if (categorizedCommits.breaking.length > 0) {
-        info('Breaking changes detected - major version bump required');
-        return 'major';
+    const versionBump = categorizedCommits.breaking.length > 0
+        ? 'major'
+        : categorizedCommits.features.length > 0
+            ? 'minor'
+            : categorizedCommits.fixes.length > 0
+                ? 'patch'
+                : undefined;
+    if (versionBump) {
+        const versionBumpMessage = versionBump === 'major'
+            ? 'Breaking changes detected - major version bump required'
+            : versionBump === 'minor'
+                ? 'New features detected - minor version bump required'
+                : 'Bug fixes detected - patch version bump required';
+        info(versionBumpMessage);
     }
-    if (categorizedCommits.features.length > 0) {
-        info('New features detected - minor version bump required');
-        return 'minor';
+    else {
+        core_debug('No version bump required');
     }
-    if (categorizedCommits.fixes.length > 0) {
-        info('Bug fixes detected - patch version bump required');
-        return 'patch';
-    }
-    core_debug('No version bump required');
-    return undefined;
+    return versionBump;
 };
 
 ;// CONCATENATED MODULE: ./src/github.ts
@@ -47668,10 +47673,6 @@ const processCommits = async (githubContext, head, sinceTag) => {
         info(`- ${sanitizeLogOutput(commit.message)} (type: ${commit.type})`);
     });
     const categorizedCommits = categorizeCommits(commits);
-    info('Categorized commits:');
-    info(`Features: ${categorizedCommits.features.length.toString()}`);
-    info(`Fixes: ${categorizedCommits.fixes.length.toString()}`);
-    info(`Breaking: ${categorizedCommits.breaking.length.toString()}`);
     return { commits, categorizedCommits };
 };
 const run = async () => {
