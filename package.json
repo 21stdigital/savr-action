@@ -1,6 +1,6 @@
 {
   "name": "savr-action",
-  "description": "GitHub Action that automatically drafts semantic GitHub Releases based on Conventional Commits.",
+  "description": "GitHub Action that keeps draft releases ready so teams can publish manually from the GitHub Releases UI.",
   "version": "0.0.0-development",
   "author": "Fabian Pahl",
   "type": "module",

@@ -1,5 +1,5 @@
 name: SAVR Action
-description: GitHub Action that automatically drafts semantic GitHub Releases based on Conventional Commits.
+description: GitHub Action that keeps draft releases ready so teams can publish manually from the GitHub Releases UI.
 author: Fabian Pahl
 
 # Add your action's branding here. This will appear on the GitHub Marketplace.

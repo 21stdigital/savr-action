@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SAVR | Always-ready draft releases for GitHub</title>
+    <meta
+      name="description"
+      content="SAVR keeps draft releases ready so your team can publish manually from the GitHub Releases UI."
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">GitHub Action for Conventional Commit repos</p>
+          <h1>Always-ready draft releases.</h1>
+          <p class="lede">
+            SAVR updates release notes on every push so your team can publish manually from the GitHub Releases page
+            when ready.
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="https://github.com/21stdigital/savr-action">View on GitHub</a>
+            <a class="button button-secondary" href="https://github.com/21stdigital/savr-action#quick-start">
+              See the quick start
+            </a>
+          </div>
+          <ul class="signal-list" aria-label="Key product signals">
+            <li>No forced auto-publish</li>
+            <li>No manual release workflow to trigger</li>
+            <li>Publish from the GitHub Releases UI</li>
+          </ul>
+        </div>
+        <section class="hero-card" aria-label="Release workflow preview">
+          <div class="card-header">
+            <span class="status-dot"></span>
+            <span>Release workflow</span>
+          </div>
+          <ol class="flow-list">
+            <li>
+              <strong>Push commits</strong>
+              <span>`feat`, `fix`, and breaking changes update the next version.</span>
+            </li>
+            <li>
+              <strong>SAVR updates the draft</strong>
+              <span>Release notes stay current on every push to your release branch.</span>
+            </li>
+            <li>
+              <strong>Publish in GitHub</strong>
+              <span>Your team reviews the draft and ships from the Releases page.</span>
+            </li>
+          </ol>
+          <pre class="code-block"><code>jobs:
+  release:
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: 21stdigital/savr-action@v1
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}</code></pre>
+        </section>
+      </header>
+
+      <main>
+        <section class="panel">
+          <div class="section-heading">
+            <p class="eyebrow">Why teams pick SAVR</p>
+            <h2>Prepared automatically. Published deliberately.</h2>
+          </div>
+          <div class="three-up">
+            <article>
+              <h3>Better than auto-publish when review matters</h3>
+              <p>
+                Fully automated tools are great when you want releases to ship themselves. SAVR is for teams that want
+                the release prepared continuously but still want a human to decide when it goes live.
+              </p>
+            </article>
+            <article>
+              <h3>Better than manual workflow dispatch when friction matters</h3>
+              <p>
+                Some teams keep manual control by triggering a release workflow. SAVR removes that extra step by keeping
+                the release draft ready inside GitHub itself.
+              </p>
+            </article>
+            <article>
+              <h3>Narrow by design</h3>
+              <p>
+                SAVR focuses on release preparation. It does not try to own package publishing, changelog files, or
+                every release concern in your CI pipeline.
+              </p>
+            </article>
+          </div>
+        </section>
+
+        <section class="panel panel-accent">
+          <div class="section-heading">
+            <p class="eyebrow">Comparison</p>
+            <h2>Choose the workflow that matches your release process.</h2>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Approach</th>
+                  <th>Best when</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Fully automated release tools</td>
+                  <td>You want CI to publish releases without human review.</td>
+                </tr>
+                <tr>
+                  <td>Manual release workflows</td>
+                  <td>You are comfortable triggering a release job each time someone cuts a release.</td>
+                </tr>
+                <tr>
+                  <td><strong>SAVR</strong></td>
+                  <td>
+                    You want the release prepared continuously and published manually from the GitHub Releases UI.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="section-heading">
+            <p class="eyebrow">Fit check</p>
+            <h2>Use it when the release draft itself is the workflow.</h2>
+          </div>
+          <div class="two-up">
+            <article class="fit-card fit-card-good">
+              <h3>Use SAVR if</h3>
+              <ul>
+                <li>You already use Conventional Commits</li>
+                <li>You want the next release visible before it ships</li>
+                <li>You want to publish directly from GitHub</li>
+                <li>You want manual control without manual release jobs</li>
+              </ul>
+            </article>
+            <article class="fit-card fit-card-warn">
+              <h3>Skip SAVR if</h3>
+              <ul>
+                <li>You want end-to-end automated package publishing</li>
+                <li>You need changelog files managed automatically</li>
+                <li>You do not want Conventional Commits</li>
+                <li>You are happy with a `workflow_dispatch` release process</li>
+              </ul>
+            </article>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer">
+        <p>The release is always ready. Your team decides when to publish.</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="https://github.com/21stdigital/savr-action">Open the repository</a>
+          <a class="button button-secondary" href="https://github.com/21stdigital/savr-action#quick-start">
+            Copy the workflow
+          </a>
+        </div>
+      </footer>
+    </div>
+  </body>
+</html>
