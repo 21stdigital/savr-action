@@ -70,6 +70,11 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  # Prevent overlapping SAVR runs from racing and deleting each other's drafts.
+  group: savr-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   release:
     runs-on: ubuntu-latest
@@ -94,6 +99,8 @@ jobs:
           #   {{/each}}
           #   {{/if}}
 ```
+
+> **Recommended:** Keep `concurrency` enabled so only one SAVR workflow run per branch can manage draft releases at a time.
 
 ## Inputs
 
