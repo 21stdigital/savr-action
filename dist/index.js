@@ -47292,8 +47292,9 @@ const deleteRelease = async (context, releaseId) => {
         throw err;
     }
 };
-const listAllReleases = async (context) => {
-    const allReleases = [];
+const listDraftReleasesForCreateOrUpdate = async (context, tagName) => {
+    let existingDraft;
+    const staleDrafts = [];
     let page = 1;
     let hasMore = true;
     while (hasMore) {
@@ -47304,19 +47305,37 @@ const listAllReleases = async (context) => {
             per_page: 100,
             page
         });
-        allReleases.push(...pageReleases);
+        for (const release of pageReleases) {
+            if (!release.draft) {
+                continue;
+            }
+            const draftRelease = {
+                id: release.id,
+                tag_name: release.tag_name,
+                body: release.body
+            };
+            if (release.tag_name === tagName) {
+                existingDraft = draftRelease;
+                continue;
+            }
+            if (release.body?.includes(SAVR_MARKER)) {
+                staleDrafts.push(draftRelease);
+            }
+        }
         hasMore = pageReleases.length === 100;
         if (hasMore) {
             page++;
         }
     }
-    return allReleases;
+    return {
+        existingDraft,
+        staleDrafts
+    };
 };
 const createOrUpdateRelease = async (context, tagName, releaseName, releaseNotes, targetCommitish, draft = true) => {
     core_debug(`Checking for existing draft release with tag ${tagName}`);
     try {
-        const releases = await listAllReleases(context);
-        const existingDraft = releases.find(({ draft, tag_name }) => draft && tag_name === tagName);
+        const { existingDraft, staleDrafts } = await listDraftReleasesForCreateOrUpdate(context, tagName);
         const releaseParams = {
             owner: context.owner,
             repo: context.repo,
@@ -47341,7 +47360,7 @@ const createOrUpdateRelease = async (context, tagName, releaseName, releaseNotes
             release = data;
         }
         // Clean up other draft releases (keep only the current one)
-        const otherDrafts = releases.filter(({ draft, tag_name, id, body }) => draft && tag_name !== tagName && id !== release.id && body?.includes(SAVR_MARKER));
+        const otherDrafts = staleDrafts.filter(({ id }) => id !== release.id);
         if (otherDrafts.length > 0) {
             info(`Found ${String(otherDrafts.length)} old draft release(s) to delete`);
             for (const oldDraft of otherDrafts) {
