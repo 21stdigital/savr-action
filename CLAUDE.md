@@ -61,7 +61,7 @@ The project uses:
 
 ### Core Modules
 
-#### Commits Module (`src/commits/index.ts`)
+#### Commits Module (`src/commits.ts`)
 
 Handles conventional commit parsing and categorization:
 
@@ -70,14 +70,14 @@ Handles conventional commit parsing and categorization:
 - `categorizeCommits()` - Groups commits into features, fixes, and breaking changes
 - `determineVersionBump()` - Returns 'major', 'minor', 'patch', or undefined based on commit categories
 
-#### Version Module (`src/version/index.ts`)
+#### Version Module (`src/version.ts`)
 
 Manages semantic versioning:
 
 - `incrementVersion()` - Increments major/minor/patch and handles pre-release/build metadata
 - `getLatestVersion()` - Finds latest semver tag from list, filters by prefix, sorts using semver comparison
 
-#### GitHub Module (`src/github/index.ts`)
+#### GitHub Module (`src/github.ts`)
 
 Interfaces with GitHub API via Octokit:
 
@@ -85,15 +85,15 @@ Interfaces with GitHub API via Octokit:
 - `getCommits()` - Paginated commit fetching between two SHAs with early termination at tag
 - `createOrUpdateRelease()` - Checks for existing draft release by tag name and updates or creates new
 
-#### Templates Module (`src/templates/index.ts`)
+#### Templates Module (`src/templates.ts`)
 
 Uses Handlebars for release note generation:
 
 - `compileReleaseNotes()` - Compiles template with version and categorized commits
-- Two default templates exist: `action.yml` defines one with conditional rendering and emoji headers (used when user provides no override), and `src/templates/index.ts` has a hardcoded `DEFAULT_TEMPLATE` fallback (no conditionals, no emoji) used when the input is empty/whitespace
+- One default template with conditional rendering and emoji headers, kept in sync across two locations: `action.yml` (used when user provides no override) and `src/templates.ts` as a hardcoded `DEFAULT_TEMPLATE` fallback (used when the input is empty/whitespace). Both are identical
 - Registers `groupByScope` helper that groups commits by scope, converting scope names to title case and sorting "General" (no scope) last
 
-#### Utils Module (`src/utils/index.ts`)
+#### Utils Module (`src/utils.ts`)
 
 - `sanitizeLogOutput()` - Escapes `::` sequences in strings to prevent GitHub Actions workflow command injection in logs
 
@@ -101,7 +101,7 @@ Uses Handlebars for release note generation:
 
 #### action.yml
 
-Defines GitHub Action interface with inputs (github-token, tag-prefix, release-branch, dry-run, release-notes-template, initial-version) and outputs (version, tag, release-url, release-id). Runs on Node 24.
+Defines GitHub Action interface with inputs (github-token, tag-prefix, release-branch, dry-run, release-notes-template, initial-version) and outputs (skipped, dry-run, version, tag, release-url, release-id). Runs on Node 24.
 
 #### TypeScript Configuration
 
@@ -125,7 +125,7 @@ Breaking changes are detected by:
 - Only creates/updates release if version bump is needed (skips if only chore/docs commits)
 - Always creates draft releases (never published automatically)
 - Reuses existing draft release for same tag name
-- Automatically deletes all other draft releases when creating/updating (keeps only the current one)
+- Automatically deletes other SAVR-managed draft releases (identified by `SAVR_MARKER`) when creating/updating; non-SAVR draft releases are preserved
 
 ### Dry-run Mode
 
@@ -133,7 +133,7 @@ When enabled, logs all actions without making API calls to create/update release
 
 ## GitHub Issues
 
-- **All issues must conform to the issue templates** in `.github/ISSUE_TEMPLATE/`. Available templates: Bug Report (`bug`), Feature Request (`enhancement`), Improvement (`improvement`), Documentation (`documentation`). Fill in all required sections for the chosen template.
+- **All issues must conform to the issue templates** in `.github/ISSUE_TEMPLATE/`. Available templates: Bug Report (label: `bug`), Feature Request (label: `enhancement`), Improvement (label: `improvement`), Documentation (label: `documentation`). Fill in all required sections for the chosen template.
 - `blank_issues_enabled: false` — freeform issues are not allowed.
 - When creating issues via `gh issue create`, structure the body with the same section headers and content as the corresponding template form fields.
 - When findings are identified during code reviews, create GitHub issues for them immediately.
