@@ -8,6 +8,7 @@ export interface Commit {
   scope?: string
   subject: string
   message: string
+  body?: string
   breaking: boolean
 }
 
@@ -35,8 +36,9 @@ const COMMIT_REGEX = new RegExp(`^(${COMMIT_TYPES.join('|')})(?:\\(([^)]+)\\))?(
 export const parseCommit = (message: string): Commit => {
   // Sanitize commit message to prevent workflow command injection in debug logs
   debug(`Parsing commit message: ${sanitizeLogOutput(message)}`)
-  // Extract only the first line for parsing and display
-  const firstLine = message.split('\n')[0]
+  // Keep first line for conventional commit parsing and retain the rest as body.
+  const [firstLine, ...remainingLines] = message.split(/\r?\n/)
+  const body = remainingLines.join('\n').trim()
   const match = COMMIT_REGEX.exec(firstLine)
 
   if (!match) {
@@ -45,6 +47,7 @@ export const parseCommit = (message: string): Commit => {
       type: 'chore',
       subject: firstLine,
       message: firstLine,
+      body,
       breaking: false
     }
   }
@@ -58,6 +61,7 @@ export const parseCommit = (message: string): Commit => {
     scope,
     subject,
     message: firstLine,
+    body,
     breaking
   }
 }
