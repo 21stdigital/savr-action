@@ -47264,7 +47264,7 @@ const isRetryableError = (err) => {
             }
             const retryAfterDateMs = Date.parse(retryAfter);
             if (!Number.isNaN(retryAfterDateMs)) {
-                return Math.max(0, retryAfterDateMs - Date.now()) >= 0;
+                return true;
             }
         }
     }
