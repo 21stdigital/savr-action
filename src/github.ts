@@ -63,6 +63,7 @@ export const getCommits = async (context: GitHubContext, head: string, sinceTag?
   const commits: Commit[] = []
   let page = 1
   let hasMore = true
+  let foundSinceTag = false
 
   try {
     while (hasMore) {
@@ -79,6 +80,7 @@ export const getCommits = async (context: GitHubContext, head: string, sinceTag?
       // If we have a sinceTag, stop when we reach it
       if (sinceTag && pageCommits.some(commit => commit.sha === sinceTag)) {
         info(`Reached target tag ${sinceTag}, stopping commit fetch`)
+        foundSinceTag = true
         // Only include commits up to but not including the tag's commit
         const commitsUpToTag = pageCommits.slice(
           0,
@@ -93,6 +95,10 @@ export const getCommits = async (context: GitHubContext, head: string, sinceTag?
           page++
         }
       }
+    }
+
+    if (sinceTag && !foundSinceTag) {
+      throw new Error(`Unable to find target tag commit ${sinceTag} in history for head ${head}`)
     }
 
     info(`Total commits retrieved: ${String(commits.length)}`)
