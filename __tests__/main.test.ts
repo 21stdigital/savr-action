@@ -54,6 +54,8 @@ describe('main', () => {
     })
     ;(getBooleanInput as Mock).mockReturnValue(false)
     ;(getOctokit as Mock).mockReturnValue(mockOctokit)
+    ;(getLatestVersion as Mock).mockReturnValue(undefined)
+    ;(determineVersionBump as Mock).mockReturnValue(null)
   })
 
   describe('run', () => {
@@ -93,6 +95,8 @@ describe('main', () => {
       expect(setOutput).toHaveBeenCalledWith('release-id', '123')
       expect(setOutput).toHaveBeenCalledWith('version', '0.1.0')
       expect(setOutput).toHaveBeenCalledWith('tag', 'v0.1.0')
+      expect(setOutput).toHaveBeenCalledWith('skipped', 'false')
+      expect(setOutput).toHaveBeenCalledWith('dry-run', 'false')
     })
 
     it('should update release when tags exist', async () => {
@@ -135,9 +139,11 @@ describe('main', () => {
       expect(setOutput).toHaveBeenCalledWith('release-id', '123')
       expect(setOutput).toHaveBeenCalledWith('version', '1.1.0')
       expect(setOutput).toHaveBeenCalledWith('tag', 'v1.1.0')
+      expect(setOutput).toHaveBeenCalledWith('skipped', 'false')
+      expect(setOutput).toHaveBeenCalledWith('dry-run', 'false')
     })
 
-    it('should handle dry run mode', async () => {
+    it('should handle dry run mode with no existing tags', async () => {
       ;(getBooleanInput as Mock).mockReturnValue(true)
       ;(getTags as Mock).mockResolvedValue([])
       mockOctokit.rest.git.getRef.mockResolvedValue({ data: { object: { sha: 'head-sha' } } })
@@ -154,7 +160,45 @@ describe('main', () => {
       await run()
 
       expect(createOrUpdateRelease).not.toHaveBeenCalled()
-      expect(setOutput).not.toHaveBeenCalled()
+      expect(setOutput).toHaveBeenCalledWith('skipped', 'true')
+      expect(setOutput).toHaveBeenCalledWith('release-url', '')
+      expect(setOutput).toHaveBeenCalledWith('release-id', '')
+      expect(setOutput).toHaveBeenCalledWith('version', '0.1.0')
+      expect(setOutput).toHaveBeenCalledWith('tag', 'v0.1.0')
+      expect(setOutput).toHaveBeenCalledWith('dry-run', 'true')
+    })
+
+    it('should handle dry run mode with existing tags', async () => {
+      ;(getBooleanInput as Mock).mockReturnValue(true)
+      ;(getTags as Mock).mockResolvedValue([{ name: 'v1.0.0', version: '1.0.0' }])
+      ;(getLatestVersion as Mock).mockReturnValue({ name: 'v1.0.0', version: '1.0.0' })
+      mockOctokit.rest.git.getRef.mockImplementation(({ ref }: { ref: string }) => {
+        if (ref === 'tags/v1.0.0') {
+          return Promise.resolve({ data: { object: { sha: 'tag-sha' } } })
+        }
+        return Promise.resolve({ data: { object: { sha: 'head-sha' } } })
+      })
+      ;(getCommits as Mock).mockResolvedValue([
+        { type: 'feat', subject: 'new feature', message: 'feat: new feature', breaking: false }
+      ])
+      ;(categorizeCommits as Mock).mockReturnValue({
+        features: [{ type: 'feat', subject: 'new feature', message: 'feat: new feature', breaking: false }],
+        fixes: [],
+        breaking: []
+      })
+      ;(determineVersionBump as Mock).mockReturnValue('minor')
+      ;(incrementVersion as Mock).mockReturnValue('1.1.0')
+      ;(compileReleaseNotes as Mock).mockReturnValue('Release notes')
+
+      await run()
+
+      expect(createOrUpdateRelease).not.toHaveBeenCalled()
+      expect(setOutput).toHaveBeenCalledWith('skipped', 'true')
+      expect(setOutput).toHaveBeenCalledWith('release-url', '')
+      expect(setOutput).toHaveBeenCalledWith('release-id', '')
+      expect(setOutput).toHaveBeenCalledWith('version', '1.1.0')
+      expect(setOutput).toHaveBeenCalledWith('tag', 'v1.1.0')
+      expect(setOutput).toHaveBeenCalledWith('dry-run', 'true')
     })
 
     it('should skip release when HEAD and tag point to same commit', async () => {
@@ -170,7 +214,12 @@ describe('main', () => {
       // Should not process commits or create release
       expect(getCommits).not.toHaveBeenCalled()
       expect(createOrUpdateRelease).not.toHaveBeenCalled()
-      expect(setOutput).not.toHaveBeenCalled()
+      expect(setOutput).toHaveBeenCalledWith('skipped', 'true')
+      expect(setOutput).toHaveBeenCalledWith('release-url', '')
+      expect(setOutput).toHaveBeenCalledWith('release-id', '')
+      expect(setOutput).toHaveBeenCalledWith('version', '1.0.0')
+      expect(setOutput).toHaveBeenCalledWith('tag', 'v1.0.0')
+      expect(setOutput).toHaveBeenCalledWith('dry-run', 'false')
     })
 
     it('should dereference annotated tags to commit SHA for commit lookup', async () => {
@@ -251,7 +300,42 @@ describe('main', () => {
       expect(mockOctokit.rest.git.getTag).toHaveBeenCalledTimes(1)
       expect(getCommits).not.toHaveBeenCalled()
       expect(createOrUpdateRelease).not.toHaveBeenCalled()
-      expect(setOutput).not.toHaveBeenCalled()
+      expect(setOutput).toHaveBeenCalledWith('skipped', 'true')
+      expect(setOutput).toHaveBeenCalledWith('release-url', '')
+      expect(setOutput).toHaveBeenCalledWith('release-id', '')
+      expect(setOutput).toHaveBeenCalledWith('version', '1.0.0')
+      expect(setOutput).toHaveBeenCalledWith('tag', 'v1.0.0')
+      expect(setOutput).toHaveBeenCalledWith('dry-run', 'false')
+    })
+
+    it('should skip release when no version bump is needed', async () => {
+      ;(getTags as Mock).mockResolvedValue([{ name: 'v1.0.0', version: '1.0.0' }])
+      ;(getLatestVersion as Mock).mockReturnValue({ name: 'v1.0.0', version: '1.0.0' })
+      mockOctokit.rest.git.getRef.mockImplementation(({ ref }: { ref: string }) => {
+        if (ref === 'tags/v1.0.0') {
+          return Promise.resolve({ data: { object: { sha: 'tag-sha' } } })
+        }
+        return Promise.resolve({ data: { object: { sha: 'head-sha' } } })
+      })
+      ;(getCommits as Mock).mockResolvedValue([
+        { type: 'chore', subject: 'deps update', message: 'chore: deps update', breaking: false }
+      ])
+      ;(categorizeCommits as Mock).mockReturnValue({
+        features: [],
+        fixes: [],
+        breaking: []
+      })
+      ;(determineVersionBump as Mock).mockReturnValue(null)
+
+      await run()
+
+      expect(createOrUpdateRelease).not.toHaveBeenCalled()
+      expect(setOutput).toHaveBeenCalledWith('skipped', 'true')
+      expect(setOutput).toHaveBeenCalledWith('release-url', '')
+      expect(setOutput).toHaveBeenCalledWith('release-id', '')
+      expect(setOutput).toHaveBeenCalledWith('version', '1.0.0')
+      expect(setOutput).toHaveBeenCalledWith('tag', 'v1.0.0')
+      expect(setOutput).toHaveBeenCalledWith('dry-run', 'false')
     })
 
     it('should throw for invalid initial-version', async () => {
