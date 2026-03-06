@@ -125,10 +125,18 @@ export const deleteRelease = async (context: GitHubContext, releaseId: number): 
   }
 }
 
-const listAllReleases = async (
-  context: GitHubContext
-): Promise<{ id: number; tag_name: string; draft: boolean; html_url: string; body?: string | null }[]> => {
-  const allReleases: { id: number; tag_name: string; draft: boolean; html_url: string; body?: string | null }[] = []
+type ReleaseDraftSummary = {
+  id: number
+  tag_name: string
+  body?: string | null
+}
+
+const listDraftReleasesForCreateOrUpdate = async (
+  context: GitHubContext,
+  tagName: string
+): Promise<{ existingDraft?: ReleaseDraftSummary; staleDrafts: ReleaseDraftSummary[] }> => {
+  let existingDraft: ReleaseDraftSummary | undefined
+  const staleDrafts: ReleaseDraftSummary[] = []
   let page = 1
   let hasMore = true
 
@@ -141,7 +149,26 @@ const listAllReleases = async (
       page
     })
 
-    allReleases.push(...pageReleases)
+    for (const release of pageReleases) {
+      if (!release.draft) {
+        continue
+      }
+
+      const draftRelease: ReleaseDraftSummary = {
+        id: release.id,
+        tag_name: release.tag_name,
+        body: release.body
+      }
+
+      if (release.tag_name === tagName) {
+        existingDraft = draftRelease
+        continue
+      }
+
+      if (release.body?.includes(SAVR_MARKER)) {
+        staleDrafts.push(draftRelease)
+      }
+    }
 
     hasMore = pageReleases.length === 100
     if (hasMore) {
@@ -149,7 +176,10 @@ const listAllReleases = async (
     }
   }
 
-  return allReleases
+  return {
+    existingDraft,
+    staleDrafts
+  }
 }
 
 export const createOrUpdateRelease = async (
@@ -163,8 +193,7 @@ export const createOrUpdateRelease = async (
   debug(`Checking for existing draft release with tag ${tagName}`)
 
   try {
-    const releases = await listAllReleases(context)
-    const existingDraft = releases.find(({ draft, tag_name }) => draft && tag_name === tagName)
+    const { existingDraft, staleDrafts } = await listDraftReleasesForCreateOrUpdate(context, tagName)
 
     const releaseParams = {
       owner: context.owner,
@@ -191,10 +220,7 @@ export const createOrUpdateRelease = async (
     }
 
     // Clean up other draft releases (keep only the current one)
-    const otherDrafts = releases.filter(
-      ({ draft, tag_name, id, body }) =>
-        draft && tag_name !== tagName && id !== release.id && body?.includes(SAVR_MARKER)
-    )
+    const otherDrafts = staleDrafts.filter(({ id }) => id !== release.id)
 
     if (otherDrafts.length > 0) {
       info(`Found ${String(otherDrafts.length)} old draft release(s) to delete`)
