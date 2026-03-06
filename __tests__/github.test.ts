@@ -1,3 +1,4 @@
+import { warning } from '@actions/core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
@@ -6,8 +7,16 @@ import {
   getCommits,
   getTags,
   type GitHubContext,
-  SAVR_MARKER
+  SAVR_MARKER,
+  withGitHubApiRetry
 } from '../src/github.js'
+
+vi.mock('@actions/core', () => ({
+  debug: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  warning: vi.fn()
+}))
 
 describe('github', () => {
   const mockOctokit = {
@@ -48,6 +57,26 @@ describe('github', () => {
   })
 
   describe('createOrUpdateRelease', () => {
+    it('retries listReleases on transient 5xx errors', async () => {
+      const serviceUnavailable = Object.assign(new Error('Service Unavailable'), {
+        status: 503,
+        response: { headers: { 'retry-after': '0' } }
+      })
+      mockOctokit.rest.repos.listReleases.mockRejectedValueOnce(serviceUnavailable).mockResolvedValueOnce({ data: [] })
+      mockOctokit.rest.repos.createRelease.mockResolvedValue({
+        data: {
+          id: 1,
+          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0',
+          tag_name: 'v1.0.0'
+        }
+      })
+
+      const result = await createOrUpdateRelease(githubContext, 'v1.0.0', '1.0.0', 'Release notes')
+
+      expect(mockOctokit.rest.repos.listReleases).toHaveBeenCalledTimes(2)
+      expect(result.tagName).toBe('v1.0.0')
+    })
+
     it('should create a new draft release when none exists', async () => {
       mockOctokit.rest.repos.listReleases.mockResolvedValue({ data: [] })
       mockOctokit.rest.repos.createRelease.mockResolvedValue({
@@ -624,6 +653,26 @@ describe('github', () => {
   })
 
   describe('getCommits', () => {
+    it('retries commit fetches on rate limit responses', async () => {
+      const rateLimitError = Object.assign(new Error('Too Many Requests'), {
+        status: 429,
+        response: { headers: { 'retry-after': '0' } }
+      })
+
+      mockOctokit.rest.repos.listCommits.mockRejectedValueOnce(rateLimitError).mockResolvedValueOnce({
+        data: [
+          { sha: 'head-1', commit: { message: 'feat: first change' } },
+          { sha: 'tag-sha', commit: { message: 'chore: tagged release' } }
+        ]
+      })
+
+      const commits = await getCommits(githubContext, 'head-1', 'tag-sha')
+
+      expect(mockOctokit.rest.repos.listCommits).toHaveBeenCalledTimes(2)
+      expect(commits).toHaveLength(1)
+      expect(commits[0]).toMatchObject({ type: 'feat', subject: 'first change' })
+    })
+
     it('should include commits up to but excluding sinceTag commit', async () => {
       mockOctokit.rest.repos.listCommits.mockResolvedValue({
         data: [
@@ -651,6 +700,132 @@ describe('github', () => {
       await expect(getCommits(githubContext, 'head-1', 'missing-tag-sha')).rejects.toThrow(
         'Unable to find target tag commit missing-tag-sha in history for head head-1'
       )
+    })
+
+    it('uses bounded retries and rethrows after retry limit is reached', async () => {
+      const transientFailure = Object.assign(new Error('Gateway Timeout'), {
+        status: 504,
+        response: { headers: { 'retry-after': '0' } }
+      })
+      mockOctokit.rest.repos.listCommits.mockRejectedValue(transientFailure)
+
+      await expect(getCommits(githubContext, 'head-1')).rejects.toThrow('Gateway Timeout')
+      expect(mockOctokit.rest.repos.listCommits).toHaveBeenCalledTimes(4)
+    })
+  })
+
+  describe('withGitHubApiRetry', () => {
+    it.each([401, 403])('does not retry status %i without retry-after header', async status => {
+      const request = vi.fn<() => Promise<string>>().mockRejectedValueOnce(
+        Object.assign(new Error(`HTTP ${String(status)}`), {
+          status
+        })
+      )
+
+      await expect(withGitHubApiRetry('test.nonRetryable', request)).rejects.toThrow(`HTTP ${String(status)}`)
+      expect(request).toHaveBeenCalledTimes(1)
+    })
+
+    it('retries status 403 when retry-after header is present', async () => {
+      const request = vi
+        .fn<() => Promise<string>>()
+        .mockRejectedValueOnce(
+          Object.assign(new Error('secondary rate limit'), {
+            status: 403,
+            response: { headers: { 'retry-after': '0' } }
+          })
+        )
+        .mockResolvedValueOnce('ok')
+
+      await expect(withGitHubApiRetry('test.secondaryRateLimit', request)).resolves.toBe('ok')
+      expect(request).toHaveBeenCalledTimes(2)
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('status 403'))
+    })
+
+    it('uses HTTP-date retry-after delays and emits operation/status warning', async () => {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout')
+      const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(1)
+
+      const request = vi
+        .fn<() => Promise<string>>()
+        .mockRejectedValueOnce(
+          Object.assign(new Error('rate limited'), {
+            status: 429,
+            response: { headers: { 'retry-after': 'Thu, 01 Jan 2026 00:00:02 GMT' } }
+          })
+        )
+        .mockResolvedValueOnce('ok')
+
+      const promise = withGitHubApiRetry('repos.listTags', request)
+      await vi.advanceTimersByTimeAsync(2000)
+      await expect(promise).resolves.toBe('ok')
+
+      expect(request).toHaveBeenCalledTimes(2)
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 2000)
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('repos.listTags'))
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('status 429'))
+
+      randomSpy.mockRestore()
+      setTimeoutSpy.mockRestore()
+      vi.useRealTimers()
+    })
+
+    it('uses x-ratelimit-reset delays for rate-limit responses', async () => {
+      vi.useFakeTimers()
+      vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout')
+      const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(1)
+
+      const request = vi
+        .fn<() => Promise<string>>()
+        .mockRejectedValueOnce(
+          Object.assign(new Error('rate limited'), {
+            status: 429,
+            response: {
+              headers: { 'x-ratelimit-reset': String(Math.floor(Date.parse('2026-01-01T00:01:30.000Z') / 1000)) }
+            }
+          })
+        )
+        .mockResolvedValueOnce('ok')
+
+      const promise = withGitHubApiRetry('repos.listCommits', request)
+      await vi.advanceTimersByTimeAsync(90_000)
+      await expect(promise).resolves.toBe('ok')
+
+      expect(request).toHaveBeenCalledTimes(2)
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 90_000)
+      expect(Number(setTimeoutSpy.mock.calls[0]?.[1])).toBeGreaterThan(10_000)
+
+      randomSpy.mockRestore()
+      setTimeoutSpy.mockRestore()
+      vi.useRealTimers()
+    })
+
+    it('retries network failures with retryable error codes', async () => {
+      vi.useFakeTimers()
+      const setTimeoutSpy = vi.spyOn(global, 'setTimeout')
+      const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(1)
+
+      const request = vi
+        .fn<() => Promise<string>>()
+        .mockRejectedValueOnce(
+          Object.assign(new Error('network failed'), {
+            code: 'ECONNRESET'
+          })
+        )
+        .mockResolvedValueOnce('ok')
+
+      const promise = withGitHubApiRetry('test.network', request)
+      await vi.advanceTimersByTimeAsync(500)
+      await expect(promise).resolves.toBe('ok')
+      expect(request).toHaveBeenCalledTimes(2)
+      expect(setTimeoutSpy).toHaveBeenCalledWith(expect.any(Function), 500)
+
+      randomSpy.mockRestore()
+      setTimeoutSpy.mockRestore()
+      vi.useRealTimers()
     })
   })
 

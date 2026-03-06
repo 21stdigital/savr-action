@@ -6,6 +6,22 @@ import { Tag } from './version.js'
 
 export const SAVR_MARKER = '<!-- savr-managed-release -->'
 
+const MAX_GITHUB_API_RETRIES = 3
+const INITIAL_RETRY_DELAY_MS = 500
+const MAX_RETRY_DELAY_MS = 10_000
+const MAX_RATE_LIMIT_DELAY_MS = 120_000
+
+const RETRYABLE_STATUS_CODES = new Set([429, 500, 502, 503, 504])
+const RETRYABLE_NETWORK_CODES = new Set([
+  'ECONNABORTED',
+  'ECONNREFUSED',
+  'ECONNRESET',
+  'EAI_AGAIN',
+  'ENETUNREACH',
+  'ENOTFOUND',
+  'ETIMEDOUT'
+])
+
 export interface GitHubContext {
   owner: string
   repo: string
@@ -18,6 +34,177 @@ export interface GitHubRelease {
   tagName: string
 }
 
+type RetryableGitHubError = Error & {
+  status?: number
+  code?: string
+  response?: {
+    headers?: Record<string, string | number | undefined>
+  }
+}
+
+const sleep = async (ms: number): Promise<void> => {
+  await new Promise(resolve => setTimeout(resolve, ms))
+}
+
+const getHeaderValue = (
+  headers: Record<string, string | number | undefined> | undefined,
+  key: string
+): string | undefined => {
+  if (headers == null) {
+    return undefined
+  }
+
+  const directValue = headers[key]
+  if (directValue != null) {
+    return String(directValue)
+  }
+
+  const lowerKey = key.toLowerCase()
+  const matchedEntry = Object.entries(headers).find(([headerKey]) => headerKey.toLowerCase() === lowerKey)
+  if (matchedEntry == null) {
+    return undefined
+  }
+
+  return matchedEntry[1] != null ? String(matchedEntry[1]) : undefined
+}
+
+const getRetryAfterDelayMs = (
+  headers: Record<string, string | number | undefined> | undefined,
+  nowMs = Date.now()
+): number | undefined => {
+  const retryAfter = getHeaderValue(headers, 'retry-after')
+  if (retryAfter == null) {
+    return undefined
+  }
+
+  const retryAfterSeconds = Number.parseFloat(retryAfter)
+  if (!Number.isNaN(retryAfterSeconds) && retryAfterSeconds >= 0) {
+    return Math.round(retryAfterSeconds * 1000)
+  }
+
+  const retryAfterDateMs = Date.parse(retryAfter)
+  if (!Number.isNaN(retryAfterDateMs)) {
+    return Math.max(0, retryAfterDateMs - nowMs)
+  }
+
+  return undefined
+}
+
+const getRateLimitResetDelayMs = (
+  headers: Record<string, string | number | undefined> | undefined,
+  nowMs = Date.now()
+): number | undefined => {
+  const rateLimitReset = getHeaderValue(headers, 'x-ratelimit-reset')
+  if (rateLimitReset == null) {
+    return undefined
+  }
+
+  const resetSeconds = Number.parseInt(rateLimitReset, 10)
+  if (Number.isNaN(resetSeconds) || resetSeconds < 0) {
+    return undefined
+  }
+
+  return Math.max(0, resetSeconds * 1000 - nowMs)
+}
+
+const applyJitter = (delayMs: number): number => {
+  if (delayMs <= 0) {
+    return 0
+  }
+
+  // Full jitter distributes retries across the full delay window.
+  return Math.round(Math.random() * delayMs)
+}
+
+const getRetryDelayMs = (attempt: number, err: RetryableGitHubError): number => {
+  const headers = err.response?.headers
+  const retryAfterDelayMs = getRetryAfterDelayMs(headers)
+  if (retryAfterDelayMs != null) {
+    return Math.min(applyJitter(retryAfterDelayMs), MAX_RATE_LIMIT_DELAY_MS)
+  }
+
+  if (err.status === 429) {
+    const rateLimitResetDelayMs = getRateLimitResetDelayMs(headers)
+    if (rateLimitResetDelayMs != null) {
+      return Math.min(applyJitter(rateLimitResetDelayMs), MAX_RATE_LIMIT_DELAY_MS)
+    }
+  }
+
+  const exponentialDelay = INITIAL_RETRY_DELAY_MS * 2 ** (attempt - 1)
+  return Math.min(applyJitter(exponentialDelay), MAX_RETRY_DELAY_MS)
+}
+
+const isRetryableError = (err: RetryableGitHubError): boolean => {
+  if (err.status != null && RETRYABLE_STATUS_CODES.has(err.status)) {
+    return true
+  }
+
+  // GitHub secondary rate limits can return 403 with Retry-After.
+  if (err.status === 403 && getRetryAfterDelayMs(err.response?.headers) != null) {
+    return true
+  }
+
+  if (err.code != null && RETRYABLE_NETWORK_CODES.has(err.code)) {
+    return true
+  }
+
+  return false
+}
+
+export const withGitHubApiRetry = async <T>(operation: string, request: () => Promise<T>): Promise<T> => {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await request()
+    } catch (rawErr) {
+      const err = rawErr as RetryableGitHubError
+
+      if (!isRetryableError(err) || attempt >= MAX_GITHUB_API_RETRIES) {
+        throw rawErr
+      }
+
+      const retryAttempt = attempt + 1
+      const delayMs = getRetryDelayMs(retryAttempt, err)
+      warning(
+        `GitHub API request failed during ${operation} with ${
+          err.status != null ? `status ${String(err.status)}` : (err.code ?? 'unknown error')
+        }; retrying in ${String(delayMs)}ms (${String(retryAttempt)}/${String(MAX_GITHUB_API_RETRIES)})`
+      )
+
+      await sleep(delayMs)
+    }
+  }
+}
+
+export const getGitRef = async (
+  context: GitHubContext,
+  ref: string
+): Promise<{ object: { sha: string; type?: string } }> => {
+  const { data } = await withGitHubApiRetry(`git.getRef(${ref})`, () =>
+    context.octokit.rest.git.getRef({
+      owner: context.owner,
+      repo: context.repo,
+      ref
+    })
+  )
+
+  return data
+}
+
+export const getAnnotatedTag = async (
+  context: GitHubContext,
+  tagSha: string
+): Promise<{ object: { sha: string; type: string } }> => {
+  const { data } = await withGitHubApiRetry(`git.getTag(${tagSha})`, () =>
+    context.octokit.rest.git.getTag({
+      owner: context.owner,
+      repo: context.repo,
+      tag_sha: tagSha
+    })
+  )
+
+  return data
+}
+
 export const getTags = async (context: GitHubContext): Promise<Tag[]> => {
   debug(`Fetching tags for repository ${context.owner}/${context.repo}`)
 
@@ -28,12 +215,14 @@ export const getTags = async (context: GitHubContext): Promise<Tag[]> => {
   try {
     while (hasMore) {
       debug(`Fetching tags page ${String(page)}`)
-      const { data: tags } = await context.octokit.rest.repos.listTags({
-        owner: context.owner,
-        repo: context.repo,
-        per_page: 100,
-        page
-      })
+      const { data: tags } = await withGitHubApiRetry('repos.listTags', () =>
+        context.octokit.rest.repos.listTags({
+          owner: context.owner,
+          repo: context.repo,
+          per_page: 100,
+          page
+        })
+      )
 
       debug(`Found ${String(tags.length)} tags on page ${String(page)}`)
       allTags.push(
@@ -68,13 +257,15 @@ export const getCommits = async (context: GitHubContext, head: string, sinceTag?
   try {
     while (hasMore) {
       debug(`Fetching commits page ${String(page)}`)
-      const { data: pageCommits } = await context.octokit.rest.repos.listCommits({
-        owner: context.owner,
-        repo: context.repo,
-        sha: head,
-        per_page: 100,
-        page
-      })
+      const { data: pageCommits } = await withGitHubApiRetry('repos.listCommits', () =>
+        context.octokit.rest.repos.listCommits({
+          owner: context.owner,
+          repo: context.repo,
+          sha: head,
+          per_page: 100,
+          page
+        })
+      )
 
       debug(`Found ${String(pageCommits.length)} commits on page ${String(page)}`)
       // If we have a sinceTag, stop when we reach it
@@ -113,11 +304,13 @@ export const deleteRelease = async (context: GitHubContext, releaseId: number): 
   debug(`Deleting release with ID ${String(releaseId)}`)
 
   try {
-    await context.octokit.rest.repos.deleteRelease({
-      owner: context.owner,
-      repo: context.repo,
-      release_id: releaseId
-    })
+    await withGitHubApiRetry('repos.deleteRelease', () =>
+      context.octokit.rest.repos.deleteRelease({
+        owner: context.owner,
+        repo: context.repo,
+        release_id: releaseId
+      })
+    )
     info(`Release with ID ${String(releaseId)} deleted successfully`)
   } catch (err) {
     error(`Failed to delete release: ${err instanceof Error ? err.message : String(err)}`)
@@ -143,12 +336,14 @@ const listDraftReleasesForCreateOrUpdate = async (
 
   while (hasMore) {
     debug(`Fetching releases page ${String(page)}`)
-    const { data: pageReleases } = await context.octokit.rest.repos.listReleases({
-      owner: context.owner,
-      repo: context.repo,
-      per_page: 100,
-      page
-    })
+    const { data: pageReleases } = await withGitHubApiRetry('repos.listReleases', () =>
+      context.octokit.rest.repos.listReleases({
+        owner: context.owner,
+        repo: context.repo,
+        per_page: 100,
+        page
+      })
+    )
 
     for (const release of pageReleases) {
       if (!release.draft) {
@@ -228,14 +423,18 @@ export const createOrUpdateRelease = async (
     let release
     if (existingDraft) {
       info(`Updating existing draft release with ID ${String(existingDraft.id)}`)
-      const { data } = await context.octokit.rest.repos.updateRelease({
-        ...releaseParams,
-        release_id: existingDraft.id
-      })
+      const { data } = await withGitHubApiRetry('repos.updateRelease', () =>
+        context.octokit.rest.repos.updateRelease({
+          ...releaseParams,
+          release_id: existingDraft.id
+        })
+      )
       release = data
     } else {
       info('Creating new draft release')
-      const { data } = await context.octokit.rest.repos.createRelease(releaseParams)
+      const { data } = await withGitHubApiRetry('repos.createRelease', () =>
+        context.octokit.rest.repos.createRelease(releaseParams)
+      )
       release = data
     }
 
