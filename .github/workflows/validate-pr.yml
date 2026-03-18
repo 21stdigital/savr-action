@@ -7,10 +7,65 @@ on:
       - edited
       - synchronize
       - reopened
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Pull request number for concurrency grouping
+        required: false
+        type: string
+      pr_title:
+        description: Pull request title to validate
+        required: true
+        type: string
+      head_sha:
+        description: PR head SHA to attach the check to
+        required: true
+        type: string
 
 permissions:
   contents: read
 
+concurrency:
+  group: validate-pr-${{ github.event.pull_request.number || inputs.pr_number || github.ref_name }}
+  cancel-in-progress: true
+
 jobs:
-  workflows:
-    uses: 21stdigital/workflows/.github/workflows/validate-pr.yml@main
+  validate_pr_title:
+    name: workflows / Validate Pull Request Title
+    runs-on: ubuntu-latest
+    env:
+      HEAD_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.head_sha || github.event.pull_request.head.sha }}
+      PR_TITLE: ${{ github.event_name == 'workflow_dispatch' && inputs.pr_title || github.event.pull_request.title }}
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.HEAD_SHA }}
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+
+      - uses: actions/cache@v5
+        name: Setup pnpm cache
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Validate Pull Request Title
+        shell: bash
+        run: printf '%s\n' "$PR_TITLE" | pnpm commitlint --verbose
