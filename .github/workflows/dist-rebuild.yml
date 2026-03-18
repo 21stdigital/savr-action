@@ -4,6 +4,7 @@ on:
   pull_request_target:
 
 permissions:
+  actions: write
   contents: write
 
 jobs:
@@ -53,7 +54,41 @@ jobs:
 
       - name: Commit updated dist/
         if: steps.dist-check.outputs.changed == 'true'
+        id: auto-commit
         uses: stefanzweifel/git-auto-commit-action@v7
         with:
           commit_message: 'chore: rebuild dist/'
           file_pattern: 'dist/*'
+
+      - name: Dispatch follow-up PR checks
+        if: steps.dist-check.outputs.changed == 'true'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const workflows = [
+              {
+                workflow_id: 'test.yml',
+                inputs: {
+                  pr_number: String(context.payload.pull_request.number),
+                  head_sha: '${{ steps.auto-commit.outputs.commit_hash }}',
+                },
+              },
+              {
+                workflow_id: 'validate-pr.yml',
+                inputs: {
+                  pr_number: String(context.payload.pull_request.number),
+                  pr_title: context.payload.pull_request.title,
+                  head_sha: '${{ steps.auto-commit.outputs.commit_hash }}',
+                },
+              },
+            ]
+
+            for (const workflow of workflows) {
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: context.payload.pull_request.head.ref,
+                workflow_id: workflow.workflow_id,
+                inputs: workflow.inputs,
+              })
+            }
