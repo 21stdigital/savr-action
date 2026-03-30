@@ -14,6 +14,7 @@ on:
         type: string
 
 permissions:
+  checks: write
   contents: read
 
 concurrency:
@@ -28,6 +29,22 @@ jobs:
       HEAD_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.head_sha || github.event.pull_request.head.sha }}
 
     steps:
+      - name: Create in-progress check run
+        if: github.event_name == 'workflow_dispatch'
+        id: create-check
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { data } = await github.rest.checks.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              name: 'Test',
+              head_sha: '${{ inputs.head_sha }}',
+              status: 'in_progress',
+              started_at: new Date().toISOString(),
+            });
+            core.setOutput('check_run_id', data.id);
+
       - uses: actions/checkout@v6
         with:
           ref: ${{ env.HEAD_SHA }}
@@ -70,3 +87,17 @@ jobs:
 
       - name: Run tests
         run: pnpm test
+
+      - name: Complete check run
+        if: always() && github.event_name == 'workflow_dispatch'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await github.rest.checks.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              check_run_id: ${{ steps.create-check.outputs.check_run_id }},
+              status: 'completed',
+              conclusion: '${{ job.status }}',
+              completed_at: new Date().toISOString(),
+            });
