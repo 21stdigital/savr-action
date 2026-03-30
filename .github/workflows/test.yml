@@ -14,8 +14,8 @@ on:
         type: string
 
 permissions:
-  checks: write
   contents: read
+  statuses: write
 
 concurrency:
   group: test-${{ github.event.pull_request.number || inputs.pr_number || github.ref_name }}
@@ -29,21 +29,19 @@ jobs:
       HEAD_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.head_sha || github.event.pull_request.head.sha }}
 
     steps:
-      - name: Create in-progress check run
+      - name: Set pending commit status
         if: github.event_name == 'workflow_dispatch'
-        id: create-check
         uses: actions/github-script@v8
         with:
           script: |
-            const { data } = await github.rest.checks.create({
+            await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              name: 'Test',
-              head_sha: '${{ inputs.head_sha }}',
-              status: 'in_progress',
-              started_at: new Date().toISOString(),
+              sha: '${{ inputs.head_sha }}',
+              state: 'pending',
+              context: 'Test',
+              description: 'Running...',
             });
-            core.setOutput('check_run_id', data.id);
 
       - uses: actions/checkout@v6
         with:
@@ -88,16 +86,17 @@ jobs:
       - name: Run tests
         run: pnpm test
 
-      - name: Complete check run
+      - name: Set final commit status
         if: always() && github.event_name == 'workflow_dispatch'
         uses: actions/github-script@v8
         with:
           script: |
-            await github.rest.checks.update({
+            const stateMap = { success: 'success', failure: 'failure', cancelled: 'error' };
+            await github.rest.repos.createCommitStatus({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              check_run_id: ${{ steps.create-check.outputs.check_run_id }},
-              status: 'completed',
-              conclusion: '${{ job.status }}',
-              completed_at: new Date().toISOString(),
+              sha: '${{ inputs.head_sha }}',
+              state: stateMap['${{ job.status }}'] || 'error',
+              context: 'Test',
+              description: '${{ job.status }}',
             });
