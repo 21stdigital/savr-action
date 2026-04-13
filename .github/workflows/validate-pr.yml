@@ -41,7 +41,7 @@ jobs:
     steps:
       - name: Set pending commit status
         if: github.event_name == 'workflow_dispatch'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             await github.rest.repos.createCommitStatus({
@@ -58,7 +58,7 @@ jobs:
           ref: ${{ env.HEAD_SHA }}
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v5
+        uses: pnpm/action-setup@v6
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -87,7 +87,7 @@ jobs:
 
       - name: Set final commit status
         if: always() && github.event_name == 'workflow_dispatch'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             const stateMap = { success: 'success', failure: 'failure', cancelled: 'error' };
