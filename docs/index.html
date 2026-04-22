@@ -3,56 +3,445 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>SAVR | Always-ready draft releases for GitHub</title>
+    <title>SAVR — Always-ready draft releases for GitHub</title>
     <meta
       name="description"
-      content="SAVR keeps draft releases ready so your team can publish manually from the GitHub Releases UI."
+      content="SAVR is a GitHub Action that keeps draft releases ready so your team can publish manually from the GitHub Releases UI."
+    />
+    <meta name="theme-color" content="#f4f5f1" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,400..800&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap"
     />
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="page-shell">
-      <header class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">GitHub Action for Conventional Commit repos</p>
-          <h1>Always-ready draft releases.</h1>
-          <p class="lede">
+    <div class="page">
+      <header class="topbar" aria-label="Site header">
+        <a class="wordmark" href="/" aria-label="SAVR home">
+          <span class="wordmark-mark" aria-hidden="true">◐</span>
+          <span class="wordmark-text">SAVR</span>
+        </a>
+        <div class="topbar-meta">
+          <span class="pill pill-ghost">
+            <span class="pill-dot" aria-hidden="true"></span>
+            v2 &middot; available now
+          </span>
+          <a class="topbar-link" href="https://github.com/21stdigital/savr-action" rel="noopener">
+            GitHub
+            <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
+              <path d="M3 3h6v6M3 9l6-6" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="square" />
+            </svg>
+          </a>
+        </div>
+      </header>
+
+      <section class="hero" aria-label="SAVR overview">
+        <div class="hero-copy reveal" style="--delay: 60ms">
+          <span class="kicker">
+            <span class="kicker-dot" aria-hidden="true"></span>
+            GitHub Action &middot; Conventional Commits
+          </span>
+          <h1 class="display">
+            Always-ready
+            <em>draft</em>
+            releases.
+          </h1>
+          <p class="deck">
             SAVR updates release notes on every push so your team can publish manually from the GitHub Releases page
             when ready.
           </p>
-          <div class="hero-actions">
-            <a class="button button-primary" href="https://github.com/21stdigital/savr-action">View on GitHub</a>
-            <a class="button button-secondary" href="https://github.com/21stdigital/savr-action#quick-start">
-              See the quick start
+          <div class="cta-row">
+            <a class="btn btn-primary" href="#quick-start">
+              <span>Copy the workflow</span>
+              <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+                <path
+                  d="M2 7h10M7 2l5 5-5 5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="square"
+                />
+              </svg>
+            </a>
+            <a class="btn btn-outline" href="https://github.com/21stdigital/savr-action" rel="noopener">
+              <span>View on GitHub</span>
             </a>
           </div>
-          <ul class="signal-list" aria-label="Key product signals">
-            <li>No forced auto-publish</li>
-            <li>No manual release workflow to trigger</li>
-            <li>Publish from the GitHub Releases UI</li>
+          <ul class="signal" aria-label="Key behaviors">
+            <li>
+              <span class="signal-mark" aria-hidden="true">+</span>
+              No forced auto-publish
+            </li>
+            <li>
+              <span class="signal-mark" aria-hidden="true">+</span>
+              No manual release workflow to trigger
+            </li>
+            <li>
+              <span class="signal-mark" aria-hidden="true">+</span>
+              Publish from the GitHub Releases UI
+            </li>
           </ul>
         </div>
-        <section class="hero-card" aria-label="Release workflow preview">
-          <div class="card-header">
-            <span class="status-dot"></span>
-            <span>Release workflow</span>
+
+        <aside class="draft-card reveal" style="--delay: 200ms" aria-label="Live draft release preview">
+          <div class="draft-head">
+            <div class="draft-status">
+              <span class="draft-live" aria-hidden="true">
+                <span class="draft-live-dot"></span>
+                <span class="draft-live-ring"></span>
+              </span>
+              <span class="draft-status-text">
+                <strong>Draft open</strong>
+                <span class="draft-updated" data-updated>updated 3s ago</span>
+              </span>
+            </div>
+            <span class="sticker sticker-coral">DRAFT</span>
           </div>
-          <ol class="flow-list">
-            <li>
-              <strong>Push commits</strong>
-              <span>`feat`, `fix`, and breaking changes update the next version.</span>
-            </li>
-            <li>
-              <strong>SAVR updates the draft</strong>
-              <span>Release notes stay current on every push to your release branch.</span>
-            </li>
-            <li>
-              <strong>Publish in GitHub</strong>
-              <span>Your team reviews the draft and ships from the Releases page.</span>
-            </li>
-          </ol>
-          <pre class="code-block"><code>jobs:
+
+          <div class="flipper" aria-label="Upcoming release tag">
+            <span class="flipper-prefix">v</span>
+            <span class="flip" data-flip data-values="2,2,2,2,3">
+              <span class="flip-card">2</span>
+            </span>
+            <span class="flipper-dot">.</span>
+            <span class="flip" data-flip data-values="3,3,4,4,4">
+              <span class="flip-card">3</span>
+            </span>
+            <span class="flipper-dot">.</span>
+            <span class="flip" data-flip data-values="0,1,0,2,0">
+              <span class="flip-card">0</span>
+            </span>
+          </div>
+
+          <div class="ticker" aria-label="Incoming commits">
+            <div class="ticker-label">Incoming commits</div>
+            <ol class="ticker-list" data-ticker></ol>
+          </div>
+
+          <div class="release-preview" aria-label="Draft release notes preview">
+            <div class="release-section">
+              <div class="release-heading">
+                <span class="dot dot-lime" aria-hidden="true"></span>
+                Features
+              </div>
+              <ul data-bucket="feat"></ul>
+            </div>
+            <div class="release-section">
+              <div class="release-heading">
+                <span class="dot dot-sky" aria-hidden="true"></span>
+                Fixes
+              </div>
+              <ul data-bucket="fix"></ul>
+            </div>
+            <div class="release-section">
+              <div class="release-heading">
+                <span class="dot dot-coral" aria-hidden="true"></span>
+                Breaking
+              </div>
+              <ul data-bucket="break"></ul>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <div class="marquee marquee-ink" aria-hidden="true" data-marquee>
+        <div class="marquee-track">
+          <span>Conventional Commits</span>
+          <span aria-hidden="true">★</span>
+          <span>Semantic Versioning</span>
+          <span aria-hidden="true">★</span>
+          <span>Draft Releases</span>
+          <span aria-hidden="true">★</span>
+          <span>Publish Manually</span>
+          <span aria-hidden="true">★</span>
+          <span>Conventional Commits</span>
+          <span aria-hidden="true">★</span>
+          <span>Semantic Versioning</span>
+          <span aria-hidden="true">★</span>
+          <span>Draft Releases</span>
+          <span aria-hidden="true">★</span>
+          <span>Publish Manually</span>
+          <span aria-hidden="true">★</span>
+        </div>
+      </div>
+
+      <main>
+        <section class="section" aria-labelledby="why">
+          <div class="section-head">
+            <span class="kicker">
+              <span class="kicker-dot" aria-hidden="true"></span>
+              Why SAVR
+            </span>
+            <h2 id="why" class="display display-md">
+              Prepared automatically.
+              <br />
+              Published deliberately.
+            </h2>
+          </div>
+          <div class="grid-3">
+            <article class="card">
+              <span class="ord">01</span>
+              <h3>Better than auto-publish when review matters.</h3>
+              <p>
+                Fully automated tools are great when you want releases to ship themselves. SAVR is for teams that want
+                the release prepared continuously but still want a human to decide when it goes live.
+              </p>
+              <span class="sticker sticker-lime card-sticker">REVIEWED</span>
+            </article>
+            <article class="card">
+              <span class="ord">02</span>
+              <h3>Better than manual workflow dispatch when friction matters.</h3>
+              <p>
+                Some teams keep manual control by triggering a release workflow. SAVR removes that extra step by keeping
+                the release draft ready inside GitHub itself.
+              </p>
+              <span class="sticker sticker-sky card-sticker">ZERO FRICTION</span>
+            </article>
+            <article class="card">
+              <span class="ord">03</span>
+              <h3>Narrow by design.</h3>
+              <p>
+                SAVR focuses on release preparation. It does not try to own package publishing, changelog files, or
+                every release concern in your CI pipeline.
+              </p>
+              <span class="sticker sticker-coral card-sticker">FOCUSED</span>
+            </article>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="compare">
+          <div class="section-head">
+            <span class="kicker">
+              <span class="kicker-dot" aria-hidden="true"></span>
+              Comparison
+            </span>
+            <h2 id="compare" class="display display-md">Choose the workflow that matches your release process.</h2>
+          </div>
+          <div class="compare">
+            <div class="compare-head">
+              <span>Approach</span>
+              <span>Best when</span>
+            </div>
+            <div class="compare-row">
+              <span class="compare-name">Fully automated release tools</span>
+              <span class="compare-desc">You want CI to publish releases without human review.</span>
+            </div>
+            <div class="compare-row">
+              <span class="compare-name">Manual release workflows</span>
+              <span class="compare-desc">
+                You are comfortable triggering a release job each time someone cuts a release.
+              </span>
+            </div>
+            <div class="compare-row compare-row--highlight">
+              <span class="compare-name">
+                SAVR
+                <span class="sticker sticker-lime">LATEST</span>
+              </span>
+              <span class="compare-desc">
+                You want the release prepared continuously and published manually from the GitHub Releases UI.
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="fit">
+          <div class="section-head">
+            <span class="kicker">
+              <span class="kicker-dot" aria-hidden="true"></span>
+              Fit check
+            </span>
+            <h2 id="fit" class="display display-md">Use it when the release draft itself is the workflow.</h2>
+          </div>
+          <div class="grid-2">
+            <article class="fit fit-good">
+              <div class="fit-head">
+                <span class="fit-badge" aria-hidden="true">Use SAVR</span>
+                <h3>You will feel at home.</h3>
+              </div>
+              <ul>
+                <li>
+                  <span class="bullet" aria-hidden="true">+</span>
+                  You already use Conventional Commits
+                </li>
+                <li>
+                  <span class="bullet" aria-hidden="true">+</span>
+                  You want the next release visible before it ships
+                </li>
+                <li>
+                  <span class="bullet" aria-hidden="true">+</span>
+                  You want to publish directly from GitHub
+                </li>
+                <li>
+                  <span class="bullet" aria-hidden="true">+</span>
+                  You want manual control without manual release jobs
+                </li>
+              </ul>
+            </article>
+            <article class="fit fit-skip">
+              <div class="fit-head">
+                <span class="fit-badge" aria-hidden="true">Skip SAVR</span>
+                <h3>Pick a different tool.</h3>
+              </div>
+              <ul>
+                <li>
+                  <span class="bullet" aria-hidden="true">&minus;</span>
+                  You want end-to-end automated package publishing
+                </li>
+                <li>
+                  <span class="bullet" aria-hidden="true">&minus;</span>
+                  You need changelog files managed automatically
+                </li>
+                <li>
+                  <span class="bullet" aria-hidden="true">&minus;</span>
+                  You do not want Conventional Commits
+                </li>
+                <li>
+                  <span class="bullet" aria-hidden="true">&minus;</span>
+                  You are happy with a <code>workflow_dispatch</code> release process
+                </li>
+              </ul>
+            </article>
+          </div>
+        </section>
+
+        <section class="section section-ink" aria-labelledby="reference">
+          <div class="section-head">
+            <span class="kicker kicker-invert">
+              <span class="kicker-dot" aria-hidden="true"></span>
+              Reference
+            </span>
+            <h2 id="reference" class="display display-md">Every input and output, in one spread.</h2>
+          </div>
+          <div class="ref-grid">
+            <div class="ref-group">
+              <div class="ref-group-label">Inputs</div>
+              <article class="ref">
+                <header>
+                  <span class="ref-name">github-token</span>
+                  <span class="ref-tag ref-required">required</span>
+                </header>
+                <p>Token used for GitHub API authentication.</p>
+              </article>
+              <article class="ref">
+                <header>
+                  <span class="ref-name">tag-prefix</span>
+                  <span class="ref-tag">default <code>v</code></span>
+                </header>
+                <p>Prefix for version tags. Up to 20 characters, limited to letters, numbers, and <code>.-_/</code>.</p>
+              </article>
+              <article class="ref">
+                <header>
+                  <span class="ref-name">release-branch</span>
+                  <span class="ref-tag">default <code>main</code></span>
+                </header>
+                <p>Branch to monitor for release drafts.</p>
+              </article>
+              <article class="ref">
+                <header>
+                  <span class="ref-name">dry-run</span>
+                  <span class="ref-tag">default <code>false</code></span>
+                </header>
+                <p>Simulate the process without creating or updating a release.</p>
+              </article>
+              <article class="ref">
+                <header>
+                  <span class="ref-name">release-notes-template</span>
+                  <span class="ref-tag">Handlebars</span>
+                </header>
+                <p>Override the default template used to render release notes.</p>
+              </article>
+              <article class="ref">
+                <header>
+                  <span class="ref-name">initial-version</span>
+                  <span class="ref-tag">default <code>1.0.0</code></span>
+                </header>
+                <p>Version to use when the repository has no existing tags.</p>
+              </article>
+            </div>
+
+            <div class="ref-group">
+              <div class="ref-group-label">Outputs</div>
+              <article class="ref ref-out">
+                <header>
+                  <span class="ref-name">version</span>
+                  <span class="ref-tag ref-tag-ghost">semver</span>
+                </header>
+                <p>Calculated semantic version for the next release.</p>
+              </article>
+              <article class="ref ref-out">
+                <header>
+                  <span class="ref-name">tag</span>
+                  <span class="ref-tag ref-tag-ghost">string</span>
+                </header>
+                <p>Full tag name including the configured prefix.</p>
+              </article>
+              <article class="ref ref-out">
+                <header>
+                  <span class="ref-name">release-url</span>
+                  <span class="ref-tag ref-tag-ghost">url</span>
+                </header>
+                <p>URL of the created or updated draft release.</p>
+              </article>
+              <article class="ref ref-out">
+                <header>
+                  <span class="ref-name">release-id</span>
+                  <span class="ref-tag ref-tag-ghost">number</span>
+                </header>
+                <p>Numeric ID of the created or updated draft release.</p>
+              </article>
+              <article class="ref ref-out">
+                <header>
+                  <span class="ref-name">skipped</span>
+                  <span class="ref-tag ref-tag-ghost">boolean</span>
+                </header>
+                <p>True when dry-run, no version bump, or no new commits were found.</p>
+              </article>
+              <article class="ref ref-out">
+                <header>
+                  <span class="ref-name">dry-run</span>
+                  <span class="ref-tag ref-tag-ghost">boolean</span>
+                </header>
+                <p>Whether the action ran in dry-run mode.</p>
+              </article>
+            </div>
+          </div>
+        </section>
+
+        <section class="section" aria-labelledby="quick-start" id="quick-start">
+          <div class="section-head">
+            <span class="kicker">
+              <span class="kicker-dot" aria-hidden="true"></span>
+              Quick start
+            </span>
+            <h2 class="display display-md">Add one workflow. Stop thinking about releases.</h2>
+          </div>
+          <div class="yaml-card">
+            <div class="yaml-head">
+              <span class="yaml-path">.github/workflows/release-draft.yml</span>
+              <button class="copy-btn" type="button" data-copy>
+                <span data-copy-label>Copy</span>
+                <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+                  <rect x="3" y="3" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.4" />
+                  <path d="M5 5V2h7v7h-3" fill="none" stroke="currentColor" stroke-width="1.4" />
+                </svg>
+              </button>
+            </div>
+            <pre class="yaml-body"><code id="yaml">name: Release draft
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
   release:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
         with:
@@ -60,110 +449,65 @@
       - uses: 21stdigital/savr-action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}</code></pre>
-        </section>
-      </header>
-
-      <main>
-        <section class="panel">
-          <div class="section-heading">
-            <p class="eyebrow">Why teams pick SAVR</p>
-            <h2>Prepared automatically. Published deliberately.</h2>
-          </div>
-          <div class="three-up">
-            <article>
-              <h3>Better than auto-publish when review matters</h3>
-              <p>
-                Fully automated tools are great when you want releases to ship themselves. SAVR is for teams that want
-                the release prepared continuously but still want a human to decide when it goes live.
-              </p>
-            </article>
-            <article>
-              <h3>Better than manual workflow dispatch when friction matters</h3>
-              <p>
-                Some teams keep manual control by triggering a release workflow. SAVR removes that extra step by keeping
-                the release draft ready inside GitHub itself.
-              </p>
-            </article>
-            <article>
-              <h3>Narrow by design</h3>
-              <p>
-                SAVR focuses on release preparation. It does not try to own package publishing, changelog files, or
-                every release concern in your CI pipeline.
-              </p>
-            </article>
-          </div>
-        </section>
-
-        <section class="panel panel-accent">
-          <div class="section-heading">
-            <p class="eyebrow">Comparison</p>
-            <h2>Choose the workflow that matches your release process.</h2>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>Approach</th>
-                  <th>Best when</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Fully automated release tools</td>
-                  <td>You want CI to publish releases without human review.</td>
-                </tr>
-                <tr>
-                  <td>Manual release workflows</td>
-                  <td>You are comfortable triggering a release job each time someone cuts a release.</td>
-                </tr>
-                <tr>
-                  <td><strong>SAVR</strong></td>
-                  <td>
-                    You want the release prepared continuously and published manually from the GitHub Releases UI.
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </section>
-
-        <section class="panel">
-          <div class="section-heading">
-            <p class="eyebrow">Fit check</p>
-            <h2>Use it when the release draft itself is the workflow.</h2>
-          </div>
-          <div class="two-up">
-            <article class="fit-card fit-card-good">
-              <h3>Use SAVR if</h3>
-              <ul>
-                <li>You already use Conventional Commits</li>
-                <li>You want the next release visible before it ships</li>
-                <li>You want to publish directly from GitHub</li>
-                <li>You want manual control without manual release jobs</li>
-              </ul>
-            </article>
-            <article class="fit-card fit-card-warn">
-              <h3>Skip SAVR if</h3>
-              <ul>
-                <li>You want end-to-end automated package publishing</li>
-                <li>You need changelog files managed automatically</li>
-                <li>You do not want Conventional Commits</li>
-                <li>You are happy with a `workflow_dispatch` release process</li>
-              </ul>
-            </article>
           </div>
         </section>
       </main>
 
       <footer class="footer">
-        <p>The release is always ready. Your team decides when to publish.</p>
-        <div class="hero-actions">
-          <a class="button button-primary" href="https://github.com/21stdigital/savr-action">Open the repository</a>
-          <a class="button button-secondary" href="https://github.com/21stdigital/savr-action#quick-start">
-            Copy the workflow
-          </a>
+        <div class="footer-lead">
+          <p class="display display-sm">
+            Publish
+            <em>when</em>
+            you're
+            <em>ready.</em>
+          </p>
+          <div class="cta-row">
+            <a class="btn btn-primary" href="https://github.com/21stdigital/savr-action" rel="noopener">
+              <span>Open the repository</span>
+            </a>
+            <a class="btn btn-outline" href="#quick-start"><span>Copy the workflow</span></a>
+          </div>
+        </div>
+        <div class="footer-meta">
+          <dl class="colophon">
+            <div>
+              <dt>Typefaces</dt>
+              <dd>Bricolage Grotesque &middot; Geist &middot; Geist Mono</dd>
+            </div>
+            <div>
+              <dt>License</dt>
+              <dd>MIT</dd>
+            </div>
+            <div>
+              <dt>Maintainer</dt>
+              <dd>21st Digital</dd>
+            </div>
+          </dl>
         </div>
       </footer>
+
+      <div class="marquee marquee-coral" aria-hidden="true" data-marquee>
+        <div class="marquee-track">
+          <span>Release when ready</span>
+          <span aria-hidden="true">◆</span>
+          <span>Not when CI fires</span>
+          <span aria-hidden="true">◆</span>
+          <span>Release when ready</span>
+          <span aria-hidden="true">◆</span>
+          <span>Not when CI fires</span>
+          <span aria-hidden="true">◆</span>
+          <span>Release when ready</span>
+          <span aria-hidden="true">◆</span>
+          <span>Not when CI fires</span>
+          <span aria-hidden="true">◆</span>
+          <span>Release when ready</span>
+          <span aria-hidden="true">◆</span>
+          <span>Not when CI fires</span>
+          <span aria-hidden="true">◆</span>
+        </div>
+      </div>
     </div>
+
+    <script type="module" defer src="./script.js"></script>
   </body>
 </html>
