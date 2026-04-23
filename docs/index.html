@@ -22,14 +22,10 @@
     <div class="page">
       <header class="topbar" aria-label="Site header">
         <a class="wordmark" href="/" aria-label="SAVR home">
-          <span class="wordmark-mark" aria-hidden="true">◐</span>
+          <img class="wordmark-mark" src="./assets/logo-mark-light.svg" alt="" width="69" height="32" />
           <span class="wordmark-text">SAVR</span>
         </a>
         <div class="topbar-meta">
-          <span class="pill pill-ghost">
-            <span class="pill-dot" aria-hidden="true"></span>
-            v2 &middot; available now
-          </span>
           <a class="topbar-link" href="https://github.com/21stdigital/savr-action" rel="noopener">
             GitHub
             <svg viewBox="0 0 12 12" width="12" height="12" aria-hidden="true">
@@ -75,10 +71,6 @@
             <li>
               <span class="signal-mark" aria-hidden="true">+</span>
               No forced auto-publish
-            </li>
-            <li>
-              <span class="signal-mark" aria-hidden="true">+</span>
-              No manual release workflow to trigger
             </li>
             <li>
               <span class="signal-mark" aria-hidden="true">+</span>
@@ -147,27 +139,6 @@
           </div>
         </aside>
       </section>
-
-      <div class="marquee marquee-ink" aria-hidden="true" data-marquee>
-        <div class="marquee-track">
-          <span>Conventional Commits</span>
-          <span aria-hidden="true">★</span>
-          <span>Semantic Versioning</span>
-          <span aria-hidden="true">★</span>
-          <span>Draft Releases</span>
-          <span aria-hidden="true">★</span>
-          <span>Publish Manually</span>
-          <span aria-hidden="true">★</span>
-          <span>Conventional Commits</span>
-          <span aria-hidden="true">★</span>
-          <span>Semantic Versioning</span>
-          <span aria-hidden="true">★</span>
-          <span>Draft Releases</span>
-          <span aria-hidden="true">★</span>
-          <span>Publish Manually</span>
-          <span aria-hidden="true">★</span>
-        </div>
-      </div>
 
       <main>
         <section class="section" aria-labelledby="why">
@@ -308,109 +279,6 @@
           </div>
         </section>
 
-        <section class="section section-ink" aria-labelledby="reference">
-          <div class="section-head">
-            <span class="kicker kicker-invert">
-              <span class="kicker-dot" aria-hidden="true"></span>
-              Reference
-            </span>
-            <h2 id="reference" class="display display-md">Every input and output, in one spread.</h2>
-          </div>
-          <div class="ref-grid">
-            <div class="ref-group">
-              <div class="ref-group-label">Inputs</div>
-              <article class="ref">
-                <header>
-                  <span class="ref-name">github-token</span>
-                  <span class="ref-tag ref-required">required</span>
-                </header>
-                <p>Token used for GitHub API authentication.</p>
-              </article>
-              <article class="ref">
-                <header>
-                  <span class="ref-name">tag-prefix</span>
-                  <span class="ref-tag">default <code>v</code></span>
-                </header>
-                <p>Prefix for version tags. Up to 20 characters, limited to letters, numbers, and <code>.-_/</code>.</p>
-              </article>
-              <article class="ref">
-                <header>
-                  <span class="ref-name">release-branch</span>
-                  <span class="ref-tag">default <code>main</code></span>
-                </header>
-                <p>Branch to monitor for release drafts.</p>
-              </article>
-              <article class="ref">
-                <header>
-                  <span class="ref-name">dry-run</span>
-                  <span class="ref-tag">default <code>false</code></span>
-                </header>
-                <p>Simulate the process without creating or updating a release.</p>
-              </article>
-              <article class="ref">
-                <header>
-                  <span class="ref-name">release-notes-template</span>
-                  <span class="ref-tag">Handlebars</span>
-                </header>
-                <p>Override the default template used to render release notes.</p>
-              </article>
-              <article class="ref">
-                <header>
-                  <span class="ref-name">initial-version</span>
-                  <span class="ref-tag">default <code>1.0.0</code></span>
-                </header>
-                <p>Version to use when the repository has no existing tags.</p>
-              </article>
-            </div>
-
-            <div class="ref-group">
-              <div class="ref-group-label">Outputs</div>
-              <article class="ref ref-out">
-                <header>
-                  <span class="ref-name">version</span>
-                  <span class="ref-tag ref-tag-ghost">semver</span>
-                </header>
-                <p>Calculated semantic version for the next release.</p>
-              </article>
-              <article class="ref ref-out">
-                <header>
-                  <span class="ref-name">tag</span>
-                  <span class="ref-tag ref-tag-ghost">string</span>
-                </header>
-                <p>Full tag name including the configured prefix.</p>
-              </article>
-              <article class="ref ref-out">
-                <header>
-                  <span class="ref-name">release-url</span>
-                  <span class="ref-tag ref-tag-ghost">url</span>
-                </header>
-                <p>URL of the created or updated draft release.</p>
-              </article>
-              <article class="ref ref-out">
-                <header>
-                  <span class="ref-name">release-id</span>
-                  <span class="ref-tag ref-tag-ghost">number</span>
-                </header>
-                <p>Numeric ID of the created or updated draft release.</p>
-              </article>
-              <article class="ref ref-out">
-                <header>
-                  <span class="ref-name">skipped</span>
-                  <span class="ref-tag ref-tag-ghost">boolean</span>
-                </header>
-                <p>True when dry-run, no version bump, or no new commits were found.</p>
-              </article>
-              <article class="ref ref-out">
-                <header>
-                  <span class="ref-name">dry-run</span>
-                  <span class="ref-tag ref-tag-ghost">boolean</span>
-                </header>
-                <p>Whether the action ran in dry-run mode.</p>
-              </article>
-            </div>
-          </div>
-        </section>
-
         <section class="section" aria-labelledby="quick-start" id="quick-start">
           <div class="section-head">
             <span class="kicker">
@@ -450,10 +318,25 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}</code></pre>
           </div>
+          <p class="reference-link">
+            <a href="https://github.com/21stdigital/savr-action#readme" rel="noopener">
+              Full reference on GitHub
+              <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true">
+                <path
+                  d="M2 7h10M7 2l5 5-5 5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="square"
+                />
+              </svg>
+            </a>
+          </p>
         </section>
       </main>
 
       <footer class="footer">
+        <img class="footer-logo" src="./assets/logo-light.svg" alt="SAVR — Semantic Automatic Version Releaser" />
         <div class="footer-lead">
           <p class="display display-sm">
             Publish
@@ -471,10 +354,6 @@ jobs:
         <div class="footer-meta">
           <dl class="colophon">
             <div>
-              <dt>Typefaces</dt>
-              <dd>Bricolage Grotesque &middot; Geist &middot; Geist Mono</dd>
-            </div>
-            <div>
               <dt>License</dt>
               <dd>MIT</dd>
             </div>
@@ -485,27 +364,6 @@ jobs:
           </dl>
         </div>
       </footer>
-
-      <div class="marquee marquee-coral" aria-hidden="true" data-marquee>
-        <div class="marquee-track">
-          <span>Release when ready</span>
-          <span aria-hidden="true">◆</span>
-          <span>Not when CI fires</span>
-          <span aria-hidden="true">◆</span>
-          <span>Release when ready</span>
-          <span aria-hidden="true">◆</span>
-          <span>Not when CI fires</span>
-          <span aria-hidden="true">◆</span>
-          <span>Release when ready</span>
-          <span aria-hidden="true">◆</span>
-          <span>Not when CI fires</span>
-          <span aria-hidden="true">◆</span>
-          <span>Release when ready</span>
-          <span aria-hidden="true">◆</span>
-          <span>Not when CI fires</span>
-          <span aria-hidden="true">◆</span>
-        </div>
-      </div>
     </div>
 
     <script type="module" defer src="./script.js"></script>
