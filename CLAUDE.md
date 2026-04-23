@@ -8,6 +8,11 @@ SAVR (Semantic Automatic Version Releaser) is a GitHub Action that automatically
 
 ## Development Commands
 
+### Toolchain
+
+- Node ≥24 required (matches the action runtime `using: node24` in `action.yml`; CI workflows also pin `node-version: 24`)
+- Package manager pinned to pnpm 10.7.1 via the `packageManager` field — prefer `pnpm` over `npm`/`yarn` for all scripts
+
 ### Building
 
 ```bash
@@ -41,10 +46,12 @@ pnpm prettier --check .  # Check formatting
 
 The project uses:
 
-- Husky for git hooks (commit-msg validation, pre-commit linting)
-- lint-staged for pre-commit formatting
+- Husky git hooks in `.husky/`:
+  - `pre-commit` → `lint-staged`
+  - `commit-msg` → `commitlint --edit`
+  - `post-checkout` / `post-merge` / `post-rebase` → `package-changed run "pnpm install"` (auto-reinstalls when `package.json`/`pnpm-lock.yaml` changed across branches — the reason `package-changed` is a devDep)
 - commitlint to enforce Conventional Commits
-- ESLint (v10) with strict TypeScript checking, import sorting, and **arrow functions enforced** (`prefer-arrow-functions` plugin)
+- ESLint (v10) flat config in `eslint.config.js` with strict TypeScript checking, import sorting, and **arrow functions enforced** (`prefer-arrow-functions` plugin)
 - Prettier for code formatting
 
 ## Architecture
@@ -84,6 +91,9 @@ Interfaces with GitHub API via Octokit:
 - `getTags()` - Fetches repository tags
 - `getCommits()` - Paginated commit fetching between two SHAs with early termination at tag
 - `createOrUpdateRelease()` - Checks for existing draft release by tag name and updates or creates new
+- `getAnnotatedTag()` - Dereferences an annotated tag to its target commit SHA
+- `getGitRef()` - Resolves a ref (branch/tag) to its SHA
+- `deleteRelease()` - Deletes a release by ID (used for SAVR-marker draft cleanup)
 
 #### Templates Module (`src/templates.ts`)
 
@@ -126,6 +136,16 @@ Breaking changes are detected by:
 - Always creates draft releases (never published automatically)
 - Reuses existing draft release for same tag name
 - Automatically deletes other SAVR-managed draft releases (identified by `SAVR_MARKER`) when creating/updating; non-SAVR draft releases are preserved
+
+### This Repo Releases Itself
+
+`.github/workflows/release-draft.yml` runs SAVR on every push to `main` via `uses: ./`, so the action dogfoods its own draft-release flow. Maintainers publish new versions manually from the GitHub Releases UI.
+
+### Bundled `dist/` and CI Auto-Rebuild
+
+- `dist/index.js` is committed — GitHub Actions execute the bundled output directly, so it must ship with every version
+- `.github/workflows/dist-rebuild.yml` runs on `pull_request_target` and auto-commits a rebuilt `dist/` back to the PR when `src/` changed but `dist/` wasn't refreshed
+- Contributors do **not** need to run `pnpm build` before opening a PR; the workflow reconciles it. Local rebuilds are only needed when testing the action outside of CI
 
 ### Dry-run Mode
 
