@@ -126,6 +126,7 @@ const bumpUpdated = () => {
 }
 
 const cycle = async () => {
+  const startVersion = [...version]
   let idx = 0
   while (true) {
     const release = releases[idx % releases.length]
@@ -138,14 +139,18 @@ const cycle = async () => {
     await wait(800)
     const next = applyBump(version, bumpType(release.commits))
     await flipTo(next)
-    await wait(reduceMotion ? 400 : 2200)
+    await wait(reduceMotion ? 400 : 3600)
     clearBuckets()
     Array.from(tickerList.children).forEach(el => {
       el.classList.add('is-leaving')
       setTimeout(() => el.remove(), 240)
     })
-    await wait(400)
+    await wait(500)
     idx += 1
+    if (idx % releases.length === 0) {
+      await flipTo([...startVersion])
+      await wait(1200)
+    }
   }
 }
 
