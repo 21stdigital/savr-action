@@ -1079,35 +1079,6 @@ h1.display {
   background: var(--coral);
 }
 
-.colophon {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
-  margin: 0;
-  padding-top: 28px;
-  border-top: 1px solid var(--line);
-}
-
-.colophon div {
-  display: grid;
-  gap: 6px;
-}
-
-.colophon dt {
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--stone);
-}
-
-.colophon dd {
-  margin: 0;
-  font-family: var(--sans);
-  font-size: 15px;
-  font-weight: 500;
-}
-
 /* ----- Reveal on load ----- */
 
 .reveal {
@@ -1200,10 +1171,6 @@ h1.display {
   .btn {
     width: 100%;
     justify-content: center;
-  }
-
-  .colophon {
-    grid-template-columns: 1fr;
   }
 
   .section-head {
