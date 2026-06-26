@@ -82,7 +82,9 @@ jobs:
         if: github.event_name == 'pull_request'
         id: dist-check
         run: |
-          if [ -n "$(git diff --name-only dist/)" ]; then
+          # --porcelain catches modified, deleted and untracked files, so a build
+          # that removes or adds a dist/ file is detected, not just modifications.
+          if [ -n "$(git status --porcelain -- dist/)" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           fi
 
