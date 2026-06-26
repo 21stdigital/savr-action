@@ -32,7 +32,7 @@
     "eslint": "10.5.0",
     "eslint-plugin-import": "2.32.0",
     "eslint-plugin-prefer-arrow-functions": "3.9.1",
-    "eslint-plugin-simple-import-sort": "12.1.1",
+    "eslint-plugin-simple-import-sort": "13.0.0",
     "husky": "9.1.7",
     "lint-staged": "16.4.0",
     "package-changed": "3.0.0",
