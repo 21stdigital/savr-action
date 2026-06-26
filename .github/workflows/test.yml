@@ -74,6 +74,28 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # Surface a rebuilt dist/ to the privileged commit-dist.yml workflow via an
+      # artifact. This job has no write token, so it can safely run PR code; the
+      # artifact is the only thing handed to the privileged side. See
+      # docs/adr/0001-dist-rebuild-split-flow.md.
+      - name: Check whether dist/ changed
+        if: github.event_name == 'pull_request'
+        id: dist-check
+        run: |
+          # --porcelain catches modified, deleted and untracked files, so a build
+          # that removes or adds a dist/ file is detected, not just modifications.
+          if [ -n "$(git status --porcelain -- dist/)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload rebuilt dist/
+        if: github.event_name == 'pull_request' && steps.dist-check.outputs.changed == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dist-rebuild
+          path: dist/
+          retention-days: 1
+
       - name: Type check
         run: pnpm -s tsc --noEmit
 

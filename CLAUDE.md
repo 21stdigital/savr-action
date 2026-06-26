@@ -144,7 +144,7 @@ Breaking changes are detected by:
 ### Bundled `dist/` and CI Auto-Rebuild
 
 - `dist/index.js` is committed — GitHub Actions execute the bundled output directly, so it must ship with every version
-- `.github/workflows/dist-rebuild.yml` runs on `pull_request_target` and auto-commits a rebuilt `dist/` back to the PR when `src/` changed but `dist/` wasn't refreshed
+- The rebuild is split for security (see `docs/adr/0001-dist-rebuild-split-flow.md`): the unprivileged `test.yml` (`pull_request`, no write token) builds `dist/` and uploads it as an artifact when it changed; the privileged `commit-dist.yml` (`workflow_run`, `contents: write`, runs from the default branch) downloads that artifact and commits it without ever executing PR-controlled code
 - Contributors do **not** need to run `pnpm build` before opening a PR; the workflow reconciles it. Local rebuilds are only needed when testing the action outside of CI
 
 ### Dry-run Mode

@@ -1,0 +1,140 @@
+name: Commit rebuilt dist/
+
+# Privileged half of the dist-rebuild flow. Triggered after the unprivileged
+# "Test" workflow finishes; it only downloads the dist/ artifact (data) and
+# commits it, never executing PR-controlled code. Runs from the default branch.
+# See docs/adr/0001-dist-rebuild-split-flow.md.
+on:
+  workflow_run:
+    workflows: ['Test']
+    types:
+      - completed
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: commit-dist-${{ github.event.workflow_run.head_branch }}
+  # Must NOT cancel in progress: a cancellation between the dist/ push and the
+  # follow-up re-dispatch would leave the new commit with no PR checks.
+  cancel-in-progress: false
+
+jobs:
+  commit-dist:
+    name: Commit rebuilt dist/
+    runs-on: ubuntu-latest
+    # Same-repo pull-request builds only -- never forks. The `event == 'pull_request'`
+    # clause is also the loop-breaker: the checks this job re-dispatches run as
+    # `workflow_dispatch`, so their completion does not re-trigger this workflow.
+    # Note: conclusion is intentionally NOT gated on success -- the dist/ artifact
+    # only exists when the build succeeded, and dist/ should stay in sync even when
+    # an unrelated lint/test step failed.
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+
+    steps:
+      # Explicit existence check (no `continue-on-error` swallowing real download
+      # failures): no artifact means dist/ was already up to date -> nothing to do.
+      - name: Check for rebuilt dist/ artifact
+        id: artifact
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const { data } = await github.rest.actions.listWorkflowRunArtifacts({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.payload.workflow_run.id,
+            })
+            const exists = data.artifacts.some(a => a.name === 'dist-rebuild')
+            core.setOutput('exists', String(exists))
+            if (!exists) core.info('No dist-rebuild artifact; dist/ was already up to date.')
+
+      - name: Check out PR branch
+        if: steps.artifact.outputs.exists == 'true'
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+
+      # Guard against the moving-ref race: the artifact was built from the Test
+      # run's head_sha; if the branch has advanced since, committing the old dist/
+      # onto the new tip would desync dist/ from src/. Skip -- the newer Test run
+      # will produce a fresh artifact and commit.
+      - name: Verify branch is still at the built commit
+        id: freshness
+        if: steps.artifact.outputs.exists == 'true'
+        run: |
+          built='${{ github.event.workflow_run.head_sha }}'
+          tip="$(git rev-parse HEAD)"
+          if [ "$built" = "$tip" ]; then
+            echo "fresh=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Branch advanced ($tip != built $built); a newer Test run will commit dist/. Skipping."
+          fi
+
+      # Reset dist/ so the artifact is authoritative -- this propagates deletions
+      # (files the build no longer emits) that a merge-in-place would leave behind.
+      - name: Reset dist/ to the rebuilt artifact
+        if: steps.artifact.outputs.exists == 'true' && steps.freshness.outputs.fresh == 'true'
+        run: rm -rf dist
+
+      - name: Download rebuilt dist/
+        if: steps.artifact.outputs.exists == 'true' && steps.freshness.outputs.fresh == 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist-rebuild
+          path: dist
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Commit updated dist/
+        if: steps.artifact.outputs.exists == 'true' && steps.freshness.outputs.fresh == 'true'
+        id: auto-commit
+        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
+        with:
+          commit_message: 'chore: rebuild dist/'
+          # Stage the whole dist/ dir (not a glob) so nested files and deletions
+          # are committed, not just top-level modifications.
+          file_pattern: 'dist'
+
+      # GITHUB_TOKEN-authored commits don't trigger workflows, so re-dispatch the
+      # PR checks against the new commit. Dispatch for every open PR on this branch
+      # (a branch can back more than one PR, e.g. to main and to a release branch).
+      - name: Dispatch follow-up PR checks
+        if: steps.auto-commit.outputs.changes_detected == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const headBranch = context.payload.workflow_run.head_branch
+            const headSha = '${{ steps.auto-commit.outputs.commit_hash }}'
+
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              head: `${context.repo.owner}:${headBranch}`,
+            })
+            if (prs.length === 0) {
+              core.info(`No open PR found for branch ${headBranch}; skipping dispatch`)
+              return
+            }
+
+            for (const pr of prs) {
+              const workflows = [
+                { workflow_id: 'test.yml', inputs: { pr_number: String(pr.number), head_sha: headSha } },
+                {
+                  workflow_id: 'validate-pr.yml',
+                  inputs: { pr_number: String(pr.number), pr_title: pr.title, head_sha: headSha },
+                },
+              ]
+              for (const workflow of workflows) {
+                await github.rest.actions.createWorkflowDispatch({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: headBranch,
+                  workflow_id: workflow.workflow_id,
+                  inputs: workflow.inputs,
+                })
+              }
+            }
