@@ -1,0 +1,94 @@
+name: Commit rebuilt dist/
+
+# Privileged half of the dist-rebuild flow. Triggered after the unprivileged
+# "Test" workflow finishes; it only downloads the dist/ artifact (data) and
+# commits it, never executing PR-controlled code. Runs from the default branch.
+# See docs/adr/0001-dist-rebuild-split-flow.md.
+on:
+  workflow_run:
+    workflows: ['Test']
+    types:
+      - completed
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: commit-dist-${{ github.event.workflow_run.head_branch }}
+  cancel-in-progress: true
+
+jobs:
+  commit-dist:
+    name: Commit rebuilt dist/
+    runs-on: ubuntu-latest
+    # Same-repo pull-request builds that succeeded only — never forks.
+    if: >-
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+
+    steps:
+      - name: Check out PR branch
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ github.event.workflow_run.head_branch }}
+
+      # No artifact means dist/ was already up to date in the PR -> nothing to do.
+      - name: Download rebuilt dist/ artifact
+        id: download
+        continue-on-error: true
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: dist-rebuild
+          path: dist
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+
+      - name: Commit updated dist/
+        if: steps.download.outcome == 'success'
+        id: auto-commit
+        uses: stefanzweifel/git-auto-commit-action@04702edda442b2e678b25b537cec683a1493fcb9 # v7.1.0
+        with:
+          commit_message: 'chore: rebuild dist/'
+          file_pattern: 'dist/*'
+
+      # GITHUB_TOKEN-authored commits don't trigger workflows, so re-dispatch the
+      # PR checks against the new commit.
+      - name: Dispatch follow-up PR checks
+        if: steps.auto-commit.outputs.changes_detected == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const headBranch = context.payload.workflow_run.head_branch
+            const headSha = '${{ steps.auto-commit.outputs.commit_hash }}'
+
+            const { data: prs } = await github.rest.pulls.list({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              head: `${context.repo.owner}:${headBranch}`,
+            })
+            const pr = prs[0]
+            if (!pr) {
+              core.info(`No open PR found for branch ${headBranch}; skipping dispatch`)
+              return
+            }
+
+            const workflows = [
+              { workflow_id: 'test.yml', inputs: { pr_number: String(pr.number), head_sha: headSha } },
+              {
+                workflow_id: 'validate-pr.yml',
+                inputs: { pr_number: String(pr.number), pr_title: pr.title, head_sha: headSha },
+              },
+            ]
+
+            for (const workflow of workflows) {
+              await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: headBranch,
+                workflow_id: workflow.workflow_id,
+                inputs: workflow.inputs,
+              })
+            }
