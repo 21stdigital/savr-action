@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { categorizeCommits, determineVersionBump } from '../src/commits.js'
 import { createOrUpdateRelease, getAnnotatedTag, getCommits, getGitRef, getTags } from '../src/github.js'
-import { run } from '../src/main.js'
+import { buildAndPublishRelease, run } from '../src/main.js'
 import { compileReleaseNotes } from '../src/templates.js'
 import { getLatestVersion, incrementVersion } from '../src/version.js'
 
@@ -464,6 +464,84 @@ describe('main', () => {
       setInputs({ 'release-branch': '   ' })
 
       await expect(run()).rejects.toThrow('release-branch must not be empty')
+    })
+  })
+
+  describe('buildAndPublishRelease', () => {
+    const githubContext = { owner: 'owner', repo: 'repo', octokit: mockOctokit } as never
+    const categorizedCommits = { features: [], fixes: [], breaking: [] }
+
+    it('compiles notes and creates the release, returning create outputs', async () => {
+      ;(compileReleaseNotes as Mock).mockReturnValue('Release notes')
+      ;(createOrUpdateRelease as Mock).mockResolvedValue({
+        url: 'https://github.com/owner/repo/releases/tag/v2.0.0',
+        id: 42,
+        tagName: 'v2.0.0'
+      })
+
+      const outputs = await buildAndPublishRelease(githubContext, {
+        version: '2.0.0',
+        tagName: 'v2.0.0',
+        releaseName: '2.0.0',
+        categorizedCommits,
+        releaseNotesTemplate: '',
+        dryRun: false,
+        dryRunMessage: 'Dry run - would create/update release with:',
+        targetCommitish: 'head-sha'
+      })
+
+      expect(compileReleaseNotes).toHaveBeenCalledWith('', { version: '2.0.0', ...categorizedCommits })
+      expect(createOrUpdateRelease).toHaveBeenCalledWith(githubContext, 'v2.0.0', '2.0.0', 'Release notes', 'head-sha')
+      expect(outputs).toEqual({
+        skipped: false,
+        releaseUrl: 'https://github.com/owner/repo/releases/tag/v2.0.0',
+        releaseId: '42',
+        version: '2.0.0',
+        tag: 'v2.0.0'
+      })
+    })
+
+    it('omits targetCommitish from the create call when not provided', async () => {
+      ;(compileReleaseNotes as Mock).mockReturnValue('Release notes')
+      ;(createOrUpdateRelease as Mock).mockResolvedValue({
+        url: 'https://github.com/owner/repo/releases/tag/v0.1.0',
+        id: 7,
+        tagName: 'v0.1.0'
+      })
+
+      await buildAndPublishRelease(githubContext, {
+        version: '0.1.0',
+        tagName: 'v0.1.0',
+        releaseName: '0.1.0',
+        categorizedCommits,
+        releaseNotesTemplate: '',
+        dryRun: false,
+        dryRunMessage: 'Dry run - would create initial release with:'
+      })
+
+      expect(createOrUpdateRelease).toHaveBeenCalledWith(githubContext, 'v0.1.0', '0.1.0', 'Release notes')
+    })
+
+    it('skips the API call and returns skipped outputs in dry-run mode', async () => {
+      ;(compileReleaseNotes as Mock).mockReturnValue('Release notes')
+
+      const outputs = await buildAndPublishRelease(githubContext, {
+        version: '2.0.0',
+        tagName: 'v2.0.0',
+        releaseName: '2.0.0',
+        categorizedCommits,
+        releaseNotesTemplate: '',
+        dryRun: true,
+        dryRunMessage: 'Dry run - would create/update release with:',
+        targetCommitish: 'head-sha'
+      })
+
+      expect(createOrUpdateRelease).not.toHaveBeenCalled()
+      expect(outputs).toEqual({
+        skipped: true,
+        version: '2.0.0',
+        tag: 'v2.0.0'
+      })
     })
   })
 })
