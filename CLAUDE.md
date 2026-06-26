@@ -11,7 +11,7 @@ SAVR (Semantic Automatic Version Releaser) is a GitHub Action that automatically
 ### Toolchain
 
 - Node ≥24 required (matches the action runtime `using: node24` in `action.yml`; CI workflows also pin `node-version: 24`)
-- Package manager pinned to pnpm 10.7.1 via the `packageManager` field — prefer `pnpm` over `npm`/`yarn` for all scripts
+- Package manager pinned to pnpm 11.9.0 via the `packageManager` field — prefer `pnpm` over `npm`/`yarn` for all scripts. pnpm settings (dependency `overrides`, `allowBuilds`, `engineStrict`, `saveExact`) live in `pnpm-workspace.yaml`, not `package.json`/`.npmrc` — pnpm 11 no longer reads them from those locations
 
 ### Building
 
@@ -169,3 +169,17 @@ Tests located in `__tests__/`:
 - `github.test.ts` - GitHub API interactions
 - `utils.test.ts` - Utility function tests
 - `main.test.ts` - End-to-end workflow testing
+
+## Agent skills
+
+### Issue tracker
+
+Issues live in this repo's GitHub Issues (`21stdigital/savr-action`) via the `gh` CLI; external PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`) — none exist yet, create on first use. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout: `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
