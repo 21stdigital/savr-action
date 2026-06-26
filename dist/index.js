@@ -56836,6 +56836,40 @@ const processCommits = async (githubContext, head, sinceTag) => {
     const categorizedCommits = categorizeCommits(commits);
     return { commits, categorizedCommits };
 };
+// Compiles release notes and either logs a dry-run preview or creates/updates
+// the draft release. Returns the outputs the caller should publish — shared by
+// the initial-release and version-bump paths in run().
+const buildAndPublishRelease = async (githubContext, options) => {
+    const { version, tagName, releaseName, categorizedCommits, releaseNotesTemplate, dryRun, dryRunMessage } = options;
+    const releaseNotes = compileReleaseNotes(releaseNotesTemplate, {
+        version,
+        ...categorizedCommits
+    });
+    if (dryRun) {
+        info(dryRunMessage);
+        info(`Version: ${version}`);
+        info('Release notes:');
+        // Sanitize release notes to prevent workflow command injection
+        info(sanitizeLogOutput(releaseNotes));
+        return {
+            skipped: true,
+            version,
+            tag: tagName
+        };
+    }
+    // Preserve the exact call arity of the two original branches: the
+    // initial-release path omits targetCommitish entirely.
+    const release = options.targetCommitish
+        ? await createOrUpdateRelease(githubContext, tagName, releaseName, releaseNotes, options.targetCommitish)
+        : await createOrUpdateRelease(githubContext, tagName, releaseName, releaseNotes);
+    return {
+        skipped: false,
+        releaseUrl: release.url,
+        releaseId: release.id.toString(),
+        version,
+        tag: release.tagName
+    };
+};
 const run = async () => {
     const token = getInput('github-token', { required: true });
     const tagPrefix = getInput('tag-prefix');
@@ -56884,35 +56918,17 @@ const run = async () => {
     const latestTag = getLatestVersion(tags, tagPrefix);
     if (latestTag == null) {
         info(`No existing tags found. Starting from version ${initialVersion}`);
-        const tagName = `${tagPrefix}${initialVersion}`;
-        const releaseName = initialVersion;
         const headRef = await getGitRef(githubContext, `heads/${releaseBranch}`);
         const { categorizedCommits } = await processCommits(githubContext, headRef.object.sha);
-        const releaseNotes = compileReleaseNotes(releaseNotesTemplate, {
+        setReleaseOutputs(await buildAndPublishRelease(githubContext, {
             version: initialVersion,
-            ...categorizedCommits
-        });
-        if (dryRun) {
-            info('Dry run - would create initial release with:');
-            info(`Version: ${initialVersion}`);
-            info('Release notes:');
-            // Sanitize release notes to prevent workflow command injection
-            info(sanitizeLogOutput(releaseNotes));
-            setReleaseOutputs({
-                skipped: true,
-                version: initialVersion,
-                tag: tagName
-            });
-            return;
-        }
-        const release = await createOrUpdateRelease(githubContext, tagName, releaseName, releaseNotes);
-        setReleaseOutputs({
-            skipped: false,
-            releaseUrl: release.url,
-            releaseId: release.id.toString(),
-            version: initialVersion,
-            tag: release.tagName
-        });
+            tagName: `${tagPrefix}${initialVersion}`,
+            releaseName: initialVersion,
+            categorizedCommits,
+            releaseNotesTemplate,
+            dryRun,
+            dryRunMessage: 'Dry run - would create initial release with:'
+        }));
         return;
     }
     const tagData = await getGitRef(githubContext, `tags/${latestTag.name}`);
@@ -56954,33 +56970,16 @@ const run = async () => {
         return;
     }
     newVersion = incrementVersion(newVersion, versionBump);
-    const releaseNotes = compileReleaseNotes(releaseNotesTemplate, {
+    setReleaseOutputs(await buildAndPublishRelease(githubContext, {
         version: newVersion,
-        ...categorizedCommits
-    });
-    if (dryRun) {
-        info('Dry run - would create/update release with:');
-        info(`Version: ${newVersion}`);
-        info('Release notes:');
-        // Sanitize release notes to prevent workflow command injection
-        info(sanitizeLogOutput(releaseNotes));
-        setReleaseOutputs({
-            skipped: true,
-            version: newVersion,
-            tag: `${tagPrefix}${newVersion}`
-        });
-        return;
-    }
-    const tagName = `${tagPrefix}${newVersion}`;
-    const releaseName = newVersion;
-    const release = await createOrUpdateRelease(githubContext, tagName, releaseName, releaseNotes, headData.object.sha);
-    setReleaseOutputs({
-        skipped: false,
-        releaseUrl: release.url,
-        releaseId: release.id.toString(),
-        version: newVersion,
-        tag: release.tagName
-    });
+        tagName: `${tagPrefix}${newVersion}`,
+        releaseName: newVersion,
+        categorizedCommits,
+        releaseNotesTemplate,
+        dryRun,
+        dryRunMessage: 'Dry run - would create/update release with:',
+        targetCommitish: headData.object.sha
+    }));
 };
 
 ;// CONCATENATED MODULE: ./src/index.ts
