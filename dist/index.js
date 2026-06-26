@@ -4892,7 +4892,7 @@ var _helpersEach = __nccwpck_require__(7064);
 
 var _helpersEach2 = _interopRequireDefault(_helpersEach);
 
-var _helpersHelperMissing = __nccwpck_require__(3191);
+var _helpersHelperMissing = __nccwpck_require__(5572);
 
 var _helpersHelperMissing2 = _interopRequireDefault(_helpersHelperMissing);
 
@@ -4908,7 +4908,7 @@ var _helpersLookup = __nccwpck_require__(4743);
 
 var _helpersLookup2 = _interopRequireDefault(_helpersLookup);
 
-var _helpersWith = __nccwpck_require__(4133);
+var _helpersWith = __nccwpck_require__(6514);
 
 var _helpersWith2 = _interopRequireDefault(_helpersWith);
 
@@ -5093,7 +5093,7 @@ module.exports = exports['default'];
 
 /***/ }),
 
-/***/ 3191:
+/***/ 5572:
 /***/ ((module, exports, __nccwpck_require__) => {
 
 
@@ -5234,7 +5234,7 @@ module.exports = exports['default'];
 
 /***/ }),
 
-/***/ 4133:
+/***/ 6514:
 /***/ ((module, exports, __nccwpck_require__) => {
 
 
@@ -6058,7 +6058,7 @@ if ( true && __WEBPACK_EXTERNAL_createRequire(import.meta.url).extensions) {
 
 /***/ }),
 
-/***/ 3431:
+/***/ 3977:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
@@ -6198,17 +6198,17 @@ class Comparator {
 
 module.exports = Comparator
 
-const parseOptions = __nccwpck_require__(7152)
-const { safeRe: re, t } = __nccwpck_require__(7643)
-const cmp = __nccwpck_require__(2666)
-const debug = __nccwpck_require__(147)
-const SemVer = __nccwpck_require__(2735)
-const Range = __nccwpck_require__(9666)
+const parseOptions = __nccwpck_require__(8410)
+const { safeRe: re, t } = __nccwpck_require__(285)
+const cmp = __nccwpck_require__(8064)
+const debug = __nccwpck_require__(4133)
+const SemVer = __nccwpck_require__(2753)
+const Range = __nccwpck_require__(2608)
 
 
 /***/ }),
 
-/***/ 9666:
+/***/ 2608:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
@@ -6311,6 +6311,9 @@ class Range {
   }
 
   parseRange (range) {
+    // strip build metadata so it can't bleed into the version
+    range = range.replace(BUILDSTRIPRE, '')
+
     // memoize range parsing for performance.
     // this is a very hot path, and fully deterministic.
     const memoOpts =
@@ -6427,21 +6430,25 @@ class Range {
 
 module.exports = Range
 
-const LRU = __nccwpck_require__(5075)
+const LRU = __nccwpck_require__(5869)
 const cache = new LRU()
 
-const parseOptions = __nccwpck_require__(7152)
-const Comparator = __nccwpck_require__(3431)
-const debug = __nccwpck_require__(147)
-const SemVer = __nccwpck_require__(2735)
+const parseOptions = __nccwpck_require__(8410)
+const Comparator = __nccwpck_require__(3977)
+const debug = __nccwpck_require__(4133)
+const SemVer = __nccwpck_require__(2753)
 const {
   safeRe: re,
+  src,
   t,
   comparatorTrimReplace,
   tildeTrimReplace,
   caretTrimReplace,
-} = __nccwpck_require__(7643)
-const { FLAG_INCLUDE_PRERELEASE, FLAG_LOOSE } = __nccwpck_require__(5182)
+} = __nccwpck_require__(285)
+const { FLAG_INCLUDE_PRERELEASE, FLAG_LOOSE } = __nccwpck_require__(8739)
+
+// unbounded global build-metadata stripper used by parseRange
+const BUILDSTRIPRE = new RegExp(src[t.BUILD], 'g')
 
 const isNullSet = c => c.value === '<0.0.0-0'
 const isAny = c => c.value === ''
@@ -6483,6 +6490,11 @@ const parseComparator = (comp, options) => {
 
 const isX = id => !id || id.toLowerCase() === 'x' || id === '*'
 
+const invalidXRangeOrder = (M, m, p) => (
+  (isX(M) && !isX(m)) ||
+  (isX(m) && p && !isX(p))
+)
+
 // ~, ~> --> * (any, kinda silly)
 // ~2, ~2.x, ~2.x.x, ~>2, ~>2.x ~>2.x.x --> >=2.0.0 <3.0.0-0
 // ~2.0, ~2.0.x, ~>2.0, ~>2.0.x --> >=2.0.0 <2.1.0-0
@@ -6500,6 +6512,10 @@ const replaceTildes = (comp, options) => {
 
 const replaceTilde = (comp, options) => {
   const r = options.loose ? re[t.TILDELOOSE] : re[t.TILDE]
+  // if we're including prereleases in the match, then the lower bound is
+  // -0, the lowest possible prerelease value, just like x-ranges and carets.
+  // this keeps `~1.2` equivalent to the `1.2.x` x-range it's documented as.
+  const z = options.includePrerelease ? '-0' : ''
   return comp.replace(r, (_, M, m, p, pr) => {
     debug('tilde', comp, _, M, m, p, pr)
     let ret
@@ -6507,10 +6523,10 @@ const replaceTilde = (comp, options) => {
     if (isX(M)) {
       ret = ''
     } else if (isX(m)) {
-      ret = `>=${M}.0.0 <${+M + 1}.0.0-0`
+      ret = `>=${M}.0.0${z} <${+M + 1}.0.0-0`
     } else if (isX(p)) {
       // ~1.2 == >=1.2.0 <1.3.0-0
-      ret = `>=${M}.${m}.0 <${M}.${+m + 1}.0-0`
+      ret = `>=${M}.${m}.0${z} <${M}.${+m + 1}.0-0`
     } else if (pr) {
       debug('replaceTilde pr', pr)
       ret = `>=${M}.${m}.${p}-${pr
@@ -6579,10 +6595,10 @@ const replaceCaret = (comp, options) => {
       if (M === '0') {
         if (m === '0') {
           ret = `>=${M}.${m}.${p
-          }${z} <${M}.${m}.${+p + 1}-0`
+          } <${M}.${m}.${+p + 1}-0`
         } else {
           ret = `>=${M}.${m}.${p
-          }${z} <${M}.${+m + 1}.0-0`
+          } <${M}.${+m + 1}.0-0`
         }
       } else {
         ret = `>=${M}.${m}.${p
@@ -6608,6 +6624,10 @@ const replaceXRange = (comp, options) => {
   const r = options.loose ? re[t.XRANGELOOSE] : re[t.XRANGE]
   return comp.replace(r, (ret, gtlt, M, m, p, pr) => {
     debug('xRange', comp, ret, gtlt, M, m, p, pr)
+    if (invalidXRangeOrder(M, m, p)) {
+      return comp
+    }
+
     const xM = isX(M)
     const xm = xM || isX(m)
     const xp = xm || isX(p)
@@ -6772,17 +6792,33 @@ const testSet = (set, version, options) => {
 
 /***/ }),
 
-/***/ 2735:
+/***/ 2753:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const debug = __nccwpck_require__(147)
-const { MAX_LENGTH, MAX_SAFE_INTEGER } = __nccwpck_require__(5182)
-const { safeRe: re, t } = __nccwpck_require__(7643)
+const debug = __nccwpck_require__(4133)
+const { MAX_LENGTH, MAX_SAFE_INTEGER } = __nccwpck_require__(8739)
+const { safeRe: re, t } = __nccwpck_require__(285)
 
-const parseOptions = __nccwpck_require__(7152)
-const { compareIdentifiers } = __nccwpck_require__(5216)
+const parseOptions = __nccwpck_require__(8410)
+const { compareIdentifiers } = __nccwpck_require__(6658)
+
+const isPrereleaseIdentifier = (prerelease, identifier) => {
+  const identifiers = identifier.split('.')
+  if (identifiers.length > prerelease.length) {
+    return false
+  }
+
+  for (let i = 0; i < identifiers.length; i++) {
+    if (compareIdentifiers(prerelease[i], identifiers[i]) !== 0) {
+      return false
+    }
+  }
+
+  return true
+}
+
 class SemVer {
   constructor (version, options) {
     options = parseOptions(options)
@@ -7086,8 +7122,9 @@ class SemVer {
           if (identifierBase === false) {
             prerelease = [identifier]
           }
-          if (compareIdentifiers(this.prerelease[0], identifier) === 0) {
-            if (isNaN(this.prerelease[1])) {
+          if (isPrereleaseIdentifier(this.prerelease, identifier)) {
+            const prereleaseBase = this.prerelease[identifier.split('.').length]
+            if (isNaN(prereleaseBase)) {
               this.prerelease = prerelease
             }
           } else {
@@ -7112,12 +7149,12 @@ module.exports = SemVer
 
 /***/ }),
 
-/***/ 5227:
+/***/ 4549:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const parse = __nccwpck_require__(8549)
+const parse = __nccwpck_require__(9695)
 const clean = (version, options) => {
   const s = parse(version.trim().replace(/^[=v]+/, ''), options)
   return s ? s.version : null
@@ -7127,17 +7164,17 @@ module.exports = clean
 
 /***/ }),
 
-/***/ 2666:
+/***/ 8064:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const eq = __nccwpck_require__(1670)
-const neq = __nccwpck_require__(410)
-const gt = __nccwpck_require__(8107)
-const gte = __nccwpck_require__(440)
-const lt = __nccwpck_require__(3076)
-const lte = __nccwpck_require__(3713)
+const eq = __nccwpck_require__(6276)
+const neq = __nccwpck_require__(1456)
+const gt = __nccwpck_require__(221)
+const gte = __nccwpck_require__(9614)
+const lt = __nccwpck_require__(298)
+const lte = __nccwpck_require__(6579)
 
 const cmp = (a, op, b, loose) => {
   switch (op) {
@@ -7188,14 +7225,14 @@ module.exports = cmp
 
 /***/ }),
 
-/***/ 5461:
+/***/ 1923:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const SemVer = __nccwpck_require__(2735)
-const parse = __nccwpck_require__(8549)
-const { safeRe: re, t } = __nccwpck_require__(7643)
+const SemVer = __nccwpck_require__(2753)
+const parse = __nccwpck_require__(9695)
+const { safeRe: re, t } = __nccwpck_require__(285)
 
 const coerce = (version, options) => {
   if (version instanceof SemVer) {
@@ -7257,12 +7294,12 @@ module.exports = coerce
 
 /***/ }),
 
-/***/ 9620:
+/***/ 2534:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const SemVer = __nccwpck_require__(2735)
+const SemVer = __nccwpck_require__(2753)
 const compareBuild = (a, b, loose) => {
   const versionA = new SemVer(a, loose)
   const versionB = new SemVer(b, loose)
@@ -7273,24 +7310,24 @@ module.exports = compareBuild
 
 /***/ }),
 
-/***/ 3910:
+/***/ 552:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const compare = __nccwpck_require__(4297)
+const compare = __nccwpck_require__(4103)
 const compareLoose = (a, b) => compare(a, b, true)
 module.exports = compareLoose
 
 
 /***/ }),
 
-/***/ 4297:
+/***/ 4103:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const SemVer = __nccwpck_require__(2735)
+const SemVer = __nccwpck_require__(2753)
 const compare = (a, b, loose) =>
   new SemVer(a, loose).compare(new SemVer(b, loose))
 
@@ -7299,12 +7336,12 @@ module.exports = compare
 
 /***/ }),
 
-/***/ 2019:
+/***/ 6121:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const parse = __nccwpck_require__(8549)
+const parse = __nccwpck_require__(9695)
 
 const diff = (version1, version2) => {
   const v1 = parse(version1, null, true)
@@ -7366,48 +7403,48 @@ module.exports = diff
 
 /***/ }),
 
-/***/ 1670:
+/***/ 6276:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const compare = __nccwpck_require__(4297)
+const compare = __nccwpck_require__(4103)
 const eq = (a, b, loose) => compare(a, b, loose) === 0
 module.exports = eq
 
 
 /***/ }),
 
-/***/ 8107:
+/***/ 221:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const compare = __nccwpck_require__(4297)
+const compare = __nccwpck_require__(4103)
 const gt = (a, b, loose) => compare(a, b, loose) > 0
 module.exports = gt
 
 
 /***/ }),
 
-/***/ 440:
+/***/ 9614:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const compare = __nccwpck_require__(4297)
+const compare = __nccwpck_require__(4103)
 const gte = (a, b, loose) => compare(a, b, loose) >= 0
 module.exports = gte
 
 
 /***/ }),
 
-/***/ 7718:
+/***/ 976:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const SemVer = __nccwpck_require__(2735)
+const SemVer = __nccwpck_require__(2753)
 
 const inc = (version, release, options, identifier, identifierBase) => {
   if (typeof (options) === 'string') {
@@ -7430,72 +7467,72 @@ module.exports = inc
 
 /***/ }),
 
-/***/ 3076:
+/***/ 298:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const compare = __nccwpck_require__(4297)
+const compare = __nccwpck_require__(4103)
 const lt = (a, b, loose) => compare(a, b, loose) < 0
 module.exports = lt
 
 
 /***/ }),
 
-/***/ 3713:
+/***/ 6579:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const compare = __nccwpck_require__(4297)
+const compare = __nccwpck_require__(4103)
 const lte = (a, b, loose) => compare(a, b, loose) <= 0
 module.exports = lte
 
 
 /***/ }),
 
-/***/ 7899:
+/***/ 9121:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const SemVer = __nccwpck_require__(2735)
+const SemVer = __nccwpck_require__(2753)
 const major = (a, loose) => new SemVer(a, loose).major
 module.exports = major
 
 
 /***/ }),
 
-/***/ 5231:
+/***/ 6981:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const SemVer = __nccwpck_require__(2735)
+const SemVer = __nccwpck_require__(2753)
 const minor = (a, loose) => new SemVer(a, loose).minor
 module.exports = minor
 
 
 /***/ }),
 
-/***/ 410:
+/***/ 1456:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const compare = __nccwpck_require__(4297)
+const compare = __nccwpck_require__(4103)
 const neq = (a, b, loose) => compare(a, b, loose) !== 0
 module.exports = neq
 
 
 /***/ }),
 
-/***/ 8549:
+/***/ 9695:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const SemVer = __nccwpck_require__(2735)
+const SemVer = __nccwpck_require__(2753)
 const parse = (version, options, throwErrors = false) => {
   if (version instanceof SemVer) {
     return version
@@ -7515,24 +7552,24 @@ module.exports = parse
 
 /***/ }),
 
-/***/ 5048:
+/***/ 5838:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const SemVer = __nccwpck_require__(2735)
+const SemVer = __nccwpck_require__(2753)
 const patch = (a, loose) => new SemVer(a, loose).patch
 module.exports = patch
 
 
 /***/ }),
 
-/***/ 9262:
+/***/ 8344:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const parse = __nccwpck_require__(8549)
+const parse = __nccwpck_require__(9695)
 const prerelease = (version, options) => {
   const parsed = parse(version, options)
   return (parsed && parsed.prerelease.length) ? parsed.prerelease : null
@@ -7542,36 +7579,36 @@ module.exports = prerelease
 
 /***/ }),
 
-/***/ 9145:
+/***/ 5623:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const compare = __nccwpck_require__(4297)
+const compare = __nccwpck_require__(4103)
 const rcompare = (a, b, loose) => compare(b, a, loose)
 module.exports = rcompare
 
 
 /***/ }),
 
-/***/ 6676:
+/***/ 8758:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const compareBuild = __nccwpck_require__(9620)
+const compareBuild = __nccwpck_require__(2534)
 const rsort = (list, loose) => list.sort((a, b) => compareBuild(b, a, loose))
 module.exports = rsort
 
 
 /***/ }),
 
-/***/ 9647:
+/***/ 633:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const Range = __nccwpck_require__(9666)
+const Range = __nccwpck_require__(2608)
 const satisfies = (version, range, options) => {
   try {
     range = new Range(range, options)
@@ -7585,24 +7622,79 @@ module.exports = satisfies
 
 /***/ }),
 
-/***/ 5156:
+/***/ 54:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const compareBuild = __nccwpck_require__(9620)
+const compareBuild = __nccwpck_require__(2534)
 const sort = (list, loose) => list.sort((a, b) => compareBuild(a, b, loose))
 module.exports = sort
 
 
 /***/ }),
 
-/***/ 5776:
+/***/ 6944:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const parse = __nccwpck_require__(8549)
+const parse = __nccwpck_require__(9695)
+const constants = __nccwpck_require__(8739)
+const SemVer = __nccwpck_require__(2753)
+
+const truncate = (version, truncation, options) => {
+  if (!constants.RELEASE_TYPES.includes(truncation)) {
+    return null
+  }
+
+  const clonedVersion = cloneInputVersion(version, options)
+  return clonedVersion && doTruncation(clonedVersion, truncation)
+}
+
+const cloneInputVersion = (version, options) => {
+  const versionStringToParse = (
+    version instanceof SemVer ? version.version : version
+  )
+
+  return parse(versionStringToParse, options)
+}
+
+const doTruncation = (version, truncation) => {
+  if (isPrerelease(truncation)) {
+    return version.version
+  }
+
+  version.prerelease = []
+
+  switch (truncation) {
+    case 'major':
+      version.minor = 0
+      version.patch = 0
+      break
+    case 'minor':
+      version.patch = 0
+      break
+  }
+
+  return version.format()
+}
+
+const isPrerelease = (type) => {
+  return type.startsWith('pre')
+}
+
+module.exports = truncate
+
+
+/***/ }),
+
+/***/ 1590:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+
+
+const parse = __nccwpck_require__(9695)
 const valid = (version, options) => {
   const v = parse(version, options)
   return v ? v.version : null
@@ -7612,53 +7704,54 @@ module.exports = valid
 
 /***/ }),
 
-/***/ 5572:
+/***/ 9046:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
 // just pre-load all the stuff that index.js lazily exports
-const internalRe = __nccwpck_require__(7643)
-const constants = __nccwpck_require__(5182)
-const SemVer = __nccwpck_require__(2735)
-const identifiers = __nccwpck_require__(5216)
-const parse = __nccwpck_require__(8549)
-const valid = __nccwpck_require__(5776)
-const clean = __nccwpck_require__(5227)
-const inc = __nccwpck_require__(7718)
-const diff = __nccwpck_require__(2019)
-const major = __nccwpck_require__(7899)
-const minor = __nccwpck_require__(5231)
-const patch = __nccwpck_require__(5048)
-const prerelease = __nccwpck_require__(9262)
-const compare = __nccwpck_require__(4297)
-const rcompare = __nccwpck_require__(9145)
-const compareLoose = __nccwpck_require__(3910)
-const compareBuild = __nccwpck_require__(9620)
-const sort = __nccwpck_require__(5156)
-const rsort = __nccwpck_require__(6676)
-const gt = __nccwpck_require__(8107)
-const lt = __nccwpck_require__(3076)
-const eq = __nccwpck_require__(1670)
-const neq = __nccwpck_require__(410)
-const gte = __nccwpck_require__(440)
-const lte = __nccwpck_require__(3713)
-const cmp = __nccwpck_require__(2666)
-const coerce = __nccwpck_require__(5461)
-const Comparator = __nccwpck_require__(3431)
-const Range = __nccwpck_require__(9666)
-const satisfies = __nccwpck_require__(9647)
-const toComparators = __nccwpck_require__(1978)
-const maxSatisfying = __nccwpck_require__(7373)
-const minSatisfying = __nccwpck_require__(8191)
-const minVersion = __nccwpck_require__(1630)
-const validRange = __nccwpck_require__(5557)
-const outside = __nccwpck_require__(4124)
-const gtr = __nccwpck_require__(64)
-const ltr = __nccwpck_require__(6201)
-const intersects = __nccwpck_require__(8661)
-const simplifyRange = __nccwpck_require__(5032)
-const subset = __nccwpck_require__(9709)
+const internalRe = __nccwpck_require__(285)
+const constants = __nccwpck_require__(8739)
+const SemVer = __nccwpck_require__(2753)
+const identifiers = __nccwpck_require__(6658)
+const parse = __nccwpck_require__(9695)
+const valid = __nccwpck_require__(1590)
+const clean = __nccwpck_require__(4549)
+const inc = __nccwpck_require__(976)
+const diff = __nccwpck_require__(6121)
+const major = __nccwpck_require__(9121)
+const minor = __nccwpck_require__(6981)
+const patch = __nccwpck_require__(5838)
+const prerelease = __nccwpck_require__(8344)
+const compare = __nccwpck_require__(4103)
+const rcompare = __nccwpck_require__(5623)
+const compareLoose = __nccwpck_require__(552)
+const compareBuild = __nccwpck_require__(2534)
+const sort = __nccwpck_require__(54)
+const rsort = __nccwpck_require__(8758)
+const gt = __nccwpck_require__(221)
+const lt = __nccwpck_require__(298)
+const eq = __nccwpck_require__(6276)
+const neq = __nccwpck_require__(1456)
+const gte = __nccwpck_require__(9614)
+const lte = __nccwpck_require__(6579)
+const cmp = __nccwpck_require__(8064)
+const coerce = __nccwpck_require__(1923)
+const truncate = __nccwpck_require__(6944)
+const Comparator = __nccwpck_require__(3977)
+const Range = __nccwpck_require__(2608)
+const satisfies = __nccwpck_require__(633)
+const toComparators = __nccwpck_require__(672)
+const maxSatisfying = __nccwpck_require__(8091)
+const minSatisfying = __nccwpck_require__(5457)
+const minVersion = __nccwpck_require__(2012)
+const validRange = __nccwpck_require__(1031)
+const outside = __nccwpck_require__(1730)
+const gtr = __nccwpck_require__(878)
+const ltr = __nccwpck_require__(5139)
+const intersects = __nccwpck_require__(1843)
+const simplifyRange = __nccwpck_require__(8058)
+const subset = __nccwpck_require__(9163)
 module.exports = {
   parse,
   valid,
@@ -7683,6 +7776,7 @@ module.exports = {
   lte,
   cmp,
   coerce,
+  truncate,
   Comparator,
   Range,
   satisfies,
@@ -7710,7 +7804,7 @@ module.exports = {
 
 /***/ }),
 
-/***/ 5182:
+/***/ 8739:
 /***/ ((module) => {
 
 
@@ -7754,7 +7848,7 @@ module.exports = {
 
 /***/ }),
 
-/***/ 147:
+/***/ 4133:
 /***/ ((module) => {
 
 
@@ -7772,7 +7866,7 @@ module.exports = debug
 
 /***/ }),
 
-/***/ 5216:
+/***/ 6658:
 /***/ ((module) => {
 
 
@@ -7808,7 +7902,7 @@ module.exports = {
 
 /***/ }),
 
-/***/ 5075:
+/***/ 5869:
 /***/ ((module) => {
 
 
@@ -7857,7 +7951,7 @@ module.exports = LRUCache
 
 /***/ }),
 
-/***/ 7152:
+/***/ 8410:
 /***/ ((module) => {
 
 
@@ -7881,7 +7975,7 @@ module.exports = parseOptions
 
 /***/ }),
 
-/***/ 7643:
+/***/ 285:
 /***/ ((module, exports, __nccwpck_require__) => {
 
 
@@ -7890,8 +7984,8 @@ const {
   MAX_SAFE_COMPONENT_LENGTH,
   MAX_SAFE_BUILD_LENGTH,
   MAX_LENGTH,
-} = __nccwpck_require__(5182)
-const debug = __nccwpck_require__(147)
+} = __nccwpck_require__(8739)
+const debug = __nccwpck_require__(4133)
 exports = module.exports = {}
 
 // The actual regexps go on exports.re
@@ -8022,7 +8116,7 @@ createToken('LOOSE', `^${src[t.LOOSEPLAIN]}$`)
 createToken('GTLT', '((?:<|>)?=?)')
 
 // Something like "2.*" or "1.2.x".
-// Note that "x.x" is a valid xRange identifer, meaning "any version"
+// Note that "x.x" is a valid xRange identifier, meaning "any version"
 // Only the first item is strictly required.
 createToken('XRANGEIDENTIFIERLOOSE', `${src[t.NUMERICIDENTIFIERLOOSE]}|x|X|\\*`)
 createToken('XRANGEIDENTIFIER', `${src[t.NUMERICIDENTIFIER]}|x|X|\\*`)
@@ -8111,25 +8205,25 @@ createToken('GTE0PRE', '^\\s*>=\\s*0\\.0\\.0-0\\s*$')
 
 /***/ }),
 
-/***/ 64:
+/***/ 878:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
 // Determine if version is greater than all the versions possible in the range.
-const outside = __nccwpck_require__(4124)
+const outside = __nccwpck_require__(1730)
 const gtr = (version, range, options) => outside(version, range, '>', options)
 module.exports = gtr
 
 
 /***/ }),
 
-/***/ 8661:
+/***/ 1843:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const Range = __nccwpck_require__(9666)
+const Range = __nccwpck_require__(2608)
 const intersects = (r1, r2, options) => {
   r1 = new Range(r1, options)
   r2 = new Range(r2, options)
@@ -8140,12 +8234,12 @@ module.exports = intersects
 
 /***/ }),
 
-/***/ 6201:
+/***/ 5139:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const outside = __nccwpck_require__(4124)
+const outside = __nccwpck_require__(1730)
 // Determine if version is less than all the versions possible in the range
 const ltr = (version, range, options) => outside(version, range, '<', options)
 module.exports = ltr
@@ -8153,13 +8247,13 @@ module.exports = ltr
 
 /***/ }),
 
-/***/ 7373:
+/***/ 8091:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const SemVer = __nccwpck_require__(2735)
-const Range = __nccwpck_require__(9666)
+const SemVer = __nccwpck_require__(2753)
+const Range = __nccwpck_require__(2608)
 
 const maxSatisfying = (versions, range, options) => {
   let max = null
@@ -8187,13 +8281,13 @@ module.exports = maxSatisfying
 
 /***/ }),
 
-/***/ 8191:
+/***/ 5457:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const SemVer = __nccwpck_require__(2735)
-const Range = __nccwpck_require__(9666)
+const SemVer = __nccwpck_require__(2753)
+const Range = __nccwpck_require__(2608)
 const minSatisfying = (versions, range, options) => {
   let min = null
   let minSV = null
@@ -8220,14 +8314,14 @@ module.exports = minSatisfying
 
 /***/ }),
 
-/***/ 1630:
+/***/ 2012:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const SemVer = __nccwpck_require__(2735)
-const Range = __nccwpck_require__(9666)
-const gt = __nccwpck_require__(8107)
+const SemVer = __nccwpck_require__(2753)
+const Range = __nccwpck_require__(2608)
+const gt = __nccwpck_require__(221)
 
 const minVersion = (range, loose) => {
   range = new Range(range, loose)
@@ -8290,20 +8384,20 @@ module.exports = minVersion
 
 /***/ }),
 
-/***/ 4124:
+/***/ 1730:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const SemVer = __nccwpck_require__(2735)
-const Comparator = __nccwpck_require__(3431)
+const SemVer = __nccwpck_require__(2753)
+const Comparator = __nccwpck_require__(3977)
 const { ANY } = Comparator
-const Range = __nccwpck_require__(9666)
-const satisfies = __nccwpck_require__(9647)
-const gt = __nccwpck_require__(8107)
-const lt = __nccwpck_require__(3076)
-const lte = __nccwpck_require__(3713)
-const gte = __nccwpck_require__(440)
+const Range = __nccwpck_require__(2608)
+const satisfies = __nccwpck_require__(633)
+const gt = __nccwpck_require__(221)
+const lt = __nccwpck_require__(298)
+const lte = __nccwpck_require__(6579)
+const gte = __nccwpck_require__(9614)
 
 const outside = (version, range, hilo, options) => {
   version = new SemVer(version, options)
@@ -8379,7 +8473,7 @@ module.exports = outside
 
 /***/ }),
 
-/***/ 5032:
+/***/ 8058:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
@@ -8387,8 +8481,8 @@ module.exports = outside
 // given a set of versions and a range, create a "simplified" range
 // that includes the same versions that the original range does
 // If the original range is shorter than the simplified one, return that.
-const satisfies = __nccwpck_require__(9647)
-const compare = __nccwpck_require__(4297)
+const satisfies = __nccwpck_require__(633)
+const compare = __nccwpck_require__(4103)
 module.exports = (versions, range, options) => {
   const set = []
   let first = null
@@ -8435,16 +8529,16 @@ module.exports = (versions, range, options) => {
 
 /***/ }),
 
-/***/ 9709:
+/***/ 9163:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const Range = __nccwpck_require__(9666)
-const Comparator = __nccwpck_require__(3431)
+const Range = __nccwpck_require__(2608)
+const Comparator = __nccwpck_require__(3977)
 const { ANY } = Comparator
-const satisfies = __nccwpck_require__(9647)
-const compare = __nccwpck_require__(4297)
+const satisfies = __nccwpck_require__(633)
+const compare = __nccwpck_require__(4103)
 
 // Complex range `r1 || r2 || ...` is a subset of `R1 || R2 || ...` iff:
 // - Every simple range `r1, r2, ...` is a null set, OR
@@ -8614,7 +8708,7 @@ const simpleSubset = (sub, dom, options) => {
         if (higher === c && higher !== gt) {
           return false
         }
-      } else if (gt.operator === '>=' && !satisfies(gt.semver, String(c), options)) {
+      } else if (gt.operator === '>=' && !c.test(gt.semver)) {
         return false
       }
     }
@@ -8632,7 +8726,7 @@ const simpleSubset = (sub, dom, options) => {
         if (lower === c && lower !== lt) {
           return false
         }
-      } else if (lt.operator === '<=' && !satisfies(lt.semver, String(c), options)) {
+      } else if (lt.operator === '<=' && !c.test(lt.semver)) {
         return false
       }
     }
@@ -8691,12 +8785,12 @@ module.exports = subset
 
 /***/ }),
 
-/***/ 1978:
+/***/ 672:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const Range = __nccwpck_require__(9666)
+const Range = __nccwpck_require__(2608)
 
 // Mostly just for testing and legacy API reasons
 const toComparators = (range, options) =>
@@ -8708,12 +8802,12 @@ module.exports = toComparators
 
 /***/ }),
 
-/***/ 5557:
+/***/ 1031:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
 
-const Range = __nccwpck_require__(9666)
+const Range = __nccwpck_require__(2608)
 const validRange = (range, options) => {
   try {
     // Return '*' instead of '' so that truthiness works.
@@ -49224,180 +49318,180 @@ module.exports = __WEBPACK_EXTERNAL_createRequire(import.meta.url)("util");
 
 /***/ }),
 
-/***/ 468:
-/***/ ((module) => {
+/***/ 644:
+/***/ ((__unused_webpack_module, exports) => {
 
 var __webpack_unused_export__;
 
-
-const NullObject = function NullObject () { }
-NullObject.prototype = Object.create(null)
-
-/**
- * RegExp to match *( ";" parameter ) in RFC 7231 sec 3.1.1.1
- *
- * parameter     = token "=" ( token / quoted-string )
- * token         = 1*tchar
- * tchar         = "!" / "#" / "$" / "%" / "&" / "'" / "*"
- *               / "+" / "-" / "." / "^" / "_" / "`" / "|" / "~"
- *               / DIGIT / ALPHA
- *               ; any VCHAR, except delimiters
- * quoted-string = DQUOTE *( qdtext / quoted-pair ) DQUOTE
- * qdtext        = HTAB / SP / %x21 / %x23-5B / %x5D-7E / obs-text
- * obs-text      = %x80-FF
- * quoted-pair   = "\" ( HTAB / SP / VCHAR / obs-text )
+/*!
+ * content-type
+ * Copyright(c) 2015 Douglas Christopher Wilson
+ * MIT Licensed
  */
-const paramRE = /; *([!#$%&'*+.^\w`|~-]+)=("(?:[\v\u0020\u0021\u0023-\u005b\u005d-\u007e\u0080-\u00ff]|\\[\v\u0020-\u00ff])*"|[!#$%&'*+.^\w`|~-]+) */gu
-
+__webpack_unused_export__ = ({ value: true });
+__webpack_unused_export__ = format;
+exports.qg = parse;
+const TEXT_REGEXP = /^[\u0009\u0020-\u007e\u0080-\u00ff]*$/;
+const TOKEN_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 /**
- * RegExp to match quoted-pair in RFC 7230 sec 3.2.6
- *
- * quoted-pair = "\" ( HTAB / SP / VCHAR / obs-text )
- * obs-text    = %x80-FF
+ * RegExp to match chars that must be quoted-pair in RFC 9110 sec 5.6.4
  */
-const quotedPairRE = /\\([\v\u0020-\u00ff])/gu
-
+const QUOTE_REGEXP = /[\\"]/g;
 /**
- * RegExp to match type in RFC 7231 sec 3.1.1.1
+ * RegExp to match type in RFC 9110 sec 8.3.1
  *
  * media-type = type "/" subtype
  * type       = token
  * subtype    = token
  */
-const mediaTypeRE = /^[!#$%&'*+.^\w|~-]+\/[!#$%&'*+.^\w|~-]+$/u
-
-// default ContentType to prevent repeated object creation
-const defaultContentType = { type: '', parameters: new NullObject() }
-Object.freeze(defaultContentType.parameters)
-Object.freeze(defaultContentType)
-
+const TYPE_REGEXP = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 /**
- * Parse media type to object.
- *
- * @param {string|object} header
- * @return {Object}
- * @public
+ * Null object perf optimization. Faster than `Object.create(null)` and `{ __proto__: null }`.
  */
-
-function parse (header) {
-  if (typeof header !== 'string') {
-    throw new TypeError('argument header is required and must be a string')
-  }
-
-  let index = header.indexOf(';')
-  const type = index !== -1
-    ? header.slice(0, index).trim()
-    : header.trim()
-
-  if (mediaTypeRE.test(type) === false) {
-    throw new TypeError('invalid media type')
-  }
-
-  const result = {
-    type: type.toLowerCase(),
-    parameters: new NullObject()
-  }
-
-  // parse parameters
-  if (index === -1) {
-    return result
-  }
-
-  let key
-  let match
-  let value
-
-  paramRE.lastIndex = index
-
-  while ((match = paramRE.exec(header))) {
-    if (match.index !== index) {
-      throw new TypeError('invalid parameter format')
+const NullObject = /* @__PURE__ */ (() => {
+    const C = function () { };
+    C.prototype = Object.create(null);
+    return C;
+})();
+/**
+ * Format an object into a `Content-Type` header.
+ */
+function format(obj) {
+    const { type, parameters } = obj;
+    if (!type || !TYPE_REGEXP.test(type)) {
+        throw new TypeError(`Invalid type: ${type}`);
     }
-
-    index += match[0].length
-    key = match[1].toLowerCase()
-    value = match[2]
-
-    if (value[0] === '"') {
-      // remove quotes and escapes
-      value = value
-        .slice(1, value.length - 1)
-
-      quotedPairRE.test(value) && (value = value.replace(quotedPairRE, '$1'))
+    let result = type;
+    if (parameters) {
+        for (const param of Object.keys(parameters)) {
+            if (!TOKEN_REGEXP.test(param)) {
+                throw new TypeError(`Invalid parameter name: ${param}`);
+            }
+            result += `; ${param}=${qstring(parameters[param])}`;
+        }
     }
-
-    result.parameters[key] = value
-  }
-
-  if (index !== header.length) {
-    throw new TypeError('invalid parameter format')
-  }
-
-  return result
+    return result;
 }
-
-function safeParse (header) {
-  if (typeof header !== 'string') {
-    return defaultContentType
-  }
-
-  let index = header.indexOf(';')
-  const type = index !== -1
-    ? header.slice(0, index).trim()
-    : header.trim()
-
-  if (mediaTypeRE.test(type) === false) {
-    return defaultContentType
-  }
-
-  const result = {
-    type: type.toLowerCase(),
-    parameters: new NullObject()
-  }
-
-  // parse parameters
-  if (index === -1) {
-    return result
-  }
-
-  let key
-  let match
-  let value
-
-  paramRE.lastIndex = index
-
-  while ((match = paramRE.exec(header))) {
-    if (match.index !== index) {
-      return defaultContentType
-    }
-
-    index += match[0].length
-    key = match[1].toLowerCase()
-    value = match[2]
-
-    if (value[0] === '"') {
-      // remove quotes and escapes
-      value = value
-        .slice(1, value.length - 1)
-
-      quotedPairRE.test(value) && (value = value.replace(quotedPairRE, '$1'))
-    }
-
-    result.parameters[key] = value
-  }
-
-  if (index !== header.length) {
-    return defaultContentType
-  }
-
-  return result
+/**
+ * Parse a `Content-Type` header.
+ */
+function parse(header, options) {
+    const len = header.length;
+    let index = skipOWS(header, 0, len);
+    const valueStart = index;
+    index = skipValue(header, index, len);
+    const valueEnd = trailingOWS(header, valueStart, index);
+    const type = header.slice(valueStart, valueEnd).toLowerCase();
+    const parameters = options?.parameters === false
+        ? new NullObject()
+        : parseParameters(header, index, len);
+    return { type, parameters };
 }
-
-__webpack_unused_export__ = { parse, safeParse }
-__webpack_unused_export__ = parse
-module.exports.xL = safeParse
-__webpack_unused_export__ = defaultContentType
-
+const SP = 32; // " "
+const HTAB = 9; // "\t"
+const SEMI = 59; // ";"
+const EQ = 61; // "="
+const DQUOTE = 34; // '"'
+const BSLASH = 92; // "\\"
+/**
+ * Parses the parameters of a `Content-Type` header starting at the given index.
+ */
+function parseParameters(header, index, len) {
+    const parameters = new NullObject();
+    parameter: while (index < len) {
+        index = skipOWS(header, index + 1 /* Skip over ; */, len);
+        const keyStart = index;
+        while (index < len) {
+            const code = header.charCodeAt(index);
+            if (code === SEMI)
+                continue parameter;
+            if (code === EQ) {
+                const keyEnd = trailingOWS(header, keyStart, index);
+                const key = header.slice(keyStart, keyEnd).toLowerCase();
+                index = skipOWS(header, index + 1, len);
+                if (index < len && header.charCodeAt(index) === DQUOTE) {
+                    index++;
+                    let value = "";
+                    while (index < len) {
+                        const code = header.charCodeAt(index++);
+                        if (code === DQUOTE) {
+                            index = skipValue(header, index, len);
+                            if (parameters[key] === undefined)
+                                parameters[key] = value;
+                            break;
+                        }
+                        if (code === BSLASH && index < len) {
+                            value += header[index++];
+                            continue;
+                        }
+                        value += String.fromCharCode(code);
+                    }
+                    continue parameter;
+                }
+                const valueStart = index;
+                index = skipValue(header, index, len);
+                if (parameters[key] === undefined) {
+                    const valueEnd = trailingOWS(header, valueStart, index);
+                    parameters[key] = header.slice(valueStart, valueEnd);
+                }
+                continue parameter;
+            }
+            index++;
+        }
+    }
+    return parameters;
+}
+/**
+ * Skip over characters until a semicolon.
+ */
+function skipValue(str, index, len) {
+    while (index < len) {
+        const char = str.charCodeAt(index);
+        if (char === SEMI)
+            break;
+        index++;
+    }
+    return index;
+}
+/**
+ * Skip optional whitespace (OWS) in an HTTP header value.
+ *
+ * OWS is defined in RFC 9110 sec 5.6.3 as SP (" ") or HTAB ("\t").
+ */
+function skipOWS(header, index, len) {
+    while (index < len) {
+        const char = header.charCodeAt(index);
+        if (char !== SP && char !== HTAB)
+            break;
+        index++;
+    }
+    return index;
+}
+/**
+ * Trim optional whitespace (OWS) from the end of a substring.
+ *
+ * OWS is defined in RFC 9110 sec 5.6.3 as SP (" ") or HTAB ("\t").
+ */
+function trailingOWS(header, start, end) {
+    while (end > start) {
+        const char = header.charCodeAt(end - 1);
+        if (char !== SP && char !== HTAB)
+            break;
+        end--;
+    }
+    return end;
+}
+/**
+ * Serialize a parameter value.
+ */
+function qstring(str) {
+    if (TOKEN_REGEXP.test(str))
+        return str;
+    if (TEXT_REGEXP.test(str))
+        return `"${str.replace(QUOTE_REGEXP, "\\$&")}"`;
+    throw new TypeError(`Invalid parameter value: ${str}`);
+}
+//# sourceMappingURL=index.js.map
 
 /***/ })
 
@@ -52427,7 +52521,7 @@ function getIDToken(aud) {
  */
 
 //# sourceMappingURL=core.js.map
-;// CONCATENATED MODULE: ./node_modules/.pnpm/@actions+github@9.0.0/node_modules/@actions/github/lib/context.js
+;// CONCATENATED MODULE: ./node_modules/.pnpm/@actions+github@9.1.1/node_modules/@actions/github/lib/context.js
 
 
 class Context {
@@ -52482,7 +52576,7 @@ class Context {
 //# sourceMappingURL=context.js.map
 // EXTERNAL MODULE: ./node_modules/.pnpm/@actions+http-client@3.0.2/node_modules/@actions/http-client/lib/index.js
 var lib = __nccwpck_require__(4647);
-;// CONCATENATED MODULE: ./node_modules/.pnpm/@actions+github@9.0.0/node_modules/@actions/github/lib/internal/utils.js
+;// CONCATENATED MODULE: ./node_modules/.pnpm/@actions+github@9.1.1/node_modules/@actions/github/lib/internal/utils.js
 var utils_awaiter = (undefined && undefined.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -52520,6 +52614,19 @@ function getProxyFetch(destinationUrl) {
 }
 function getApiBaseUrl() {
     return process.env['GITHUB_API_URL'] || 'https://api.github.com';
+}
+function getUserAgentWithOrchestrationId(baseUserAgent) {
+    var _a;
+    const orchId = (_a = process.env['ACTIONS_ORCHESTRATION_ID']) === null || _a === void 0 ? void 0 : _a.trim();
+    if (orchId) {
+        const sanitizedId = orchId.replace(/[^a-z0-9_.-]/gi, '_');
+        const tag = `actions_orchestration_id/${sanitizedId}`;
+        if (baseUserAgent === null || baseUserAgent === void 0 ? void 0 : baseUserAgent.includes(tag))
+            return baseUserAgent;
+        const ua = baseUserAgent ? `${baseUserAgent} ` : '';
+        return `${ua}${tag}`;
+    }
+    return baseUserAgent;
 }
 //# sourceMappingURL=utils.js.map
 ;// CONCATENATED MODULE: ./node_modules/.pnpm/universal-user-agent@7.0.3/node_modules/universal-user-agent/index.js
@@ -53028,9 +53135,9 @@ function withDefaults(oldDefaults, newDefaults) {
 var endpoint = withDefaults(null, DEFAULTS);
 
 
-// EXTERNAL MODULE: ./node_modules/.pnpm/fast-content-type-parse@3.0.0/node_modules/fast-content-type-parse/index.js
-var fast_content_type_parse = __nccwpck_require__(468);
-;// CONCATENATED MODULE: ./node_modules/.pnpm/json-with-bigint@3.5.7/node_modules/json-with-bigint/json-with-bigint.js
+// EXTERNAL MODULE: ./node_modules/.pnpm/content-type@2.0.0/node_modules/content-type/dist/index.js
+var dist = __nccwpck_require__(644);
+;// CONCATENATED MODULE: ./node_modules/.pnpm/json-with-bigint@3.5.8/node_modules/json-with-bigint/json-with-bigint.js
 const intRegex = /^-?\d+$/;
 const noiseValue = /^-?\d+n+$/; // Noise - strings that match the custom format before being converted to it
 const originalStringify = JSON.stringify;
@@ -53041,14 +53148,26 @@ const bigIntsStringify = /([\[:])?"(-?\d+)n"($|([\\n]|\s)*(\s|[\\n])*[,\}\]])/g;
 const noiseStringify =
   /([\[:])?("-?\d+n+)n("$|"([\\n]|\s)*(\s|[\\n])*[,\}\]])/g;
 
-/** @typedef {(key: string, value: any, context?: { source: string }) => any} Reviver */
+/**
+ * @typedef {(this: any, key: string | number | undefined, value: any) => any} Replacer
+ * @typedef {(key: string | number | undefined, value: any, context?: { source: string }) => any} Reviver
+ */
 
 /**
- * Function to serialize value to a JSON string.
- * Converts BigInt values to a custom format (strings with digits and "n" at the end) and then converts them to proper big integers in a JSON string.
- * @param {*} value - The value to convert to a JSON string.
- * @param {(Function|Array<string>|null)} [replacer] - A function that alters the behavior of the stringification process, or an array of strings to indicate properties to exclude.
- * @param {(string|number)} [space] - A string or number to specify indentation or pretty-printing.
+ * Converts a JavaScript value to a JSON string.
+ *
+ * Supports serialization of BigInt values using two strategies:
+ * 1. Custom format "123n" → "123" (universal fallback)
+ * 2. Native JSON.rawJSON() (Node.js 22+, fastest) when available
+ *
+ * All other values are serialized exactly like native JSON.stringify().
+ *
+ * @param {*} value The value to convert to a JSON string.
+ * @param {Replacer | Array<string | number> | null} [replacer]
+ *   A function that alters the behavior of the stringification process,
+ *   or an array of strings/numbers to indicate properties to exclude.
+ * @param {string | number} [space]
+ *   A string or number to specify indentation or pretty-printing.
  * @returns {string} The JSON string representation.
  */
 const JSONStringify = (value, replacer, space) => {
@@ -53073,8 +53192,7 @@ const JSONStringify = (value, replacer, space) => {
   const convertedToCustomJSON = originalStringify(
     value,
     (key, value) => {
-      const isNoise =
-        typeof value === "string" && Boolean(value.match(noiseValue));
+      const isNoise = typeof value === "string" && noiseValue.test(value);
 
       if (isNoise) return value.toString() + "n"; // Mark noise values with additional "n" to offset the deletion of one "n" during the processing
 
@@ -53097,33 +53215,71 @@ const JSONStringify = (value, replacer, space) => {
   return denoisedJSON;
 };
 
-/**
- * Support for JSON.parse's context.source feature detection.
- * @type {boolean}
- */
-const isContextSourceSupported = () =>
-  JSON.parse("1", (_, __, context) => !!context && context.source === "1");
+const featureCache = new Map();
 
 /**
- * Convert marked big numbers to BigInt
- * @type {Reviver}
+ * Detects if the current JSON.parse implementation supports the context.source feature.
+ *
+ * Uses toString() fingerprinting to cache results and automatically detect runtime
+ * replacements of JSON.parse (polyfills, mocks, etc.).
+ *
+ * @returns {boolean} true if context.source is supported, false otherwise.
+ */
+const isContextSourceSupported = () => {
+  const parseFingerprint = JSON.parse.toString();
+
+  if (featureCache.has(parseFingerprint)) {
+    return featureCache.get(parseFingerprint);
+  }
+
+  try {
+    const result = JSON.parse(
+      "1",
+      (_, __, context) => !!context?.source && context.source === "1",
+    );
+    featureCache.set(parseFingerprint, result);
+
+    return result;
+  } catch {
+    featureCache.set(parseFingerprint, false);
+
+    return false;
+  }
+};
+
+/**
+ * Reviver function that converts custom-format BigInt strings back to BigInt values.
+ * Also handles "noise" strings that accidentally match the BigInt format.
+ *
+ * @param {string | number | undefined} key The object key.
+ * @param {*} value The value being parsed.
+ * @param {object} [context] Parse context (if supported by JSON.parse).
+ * @param {Reviver} [userReviver] User's custom reviver function.
+ * @returns {any} The transformed value.
  */
 const convertMarkedBigIntsReviver = (key, value, context, userReviver) => {
   const isCustomFormatBigInt =
-    typeof value === "string" && value.match(customFormat);
+    typeof value === "string" && customFormat.test(value);
   if (isCustomFormatBigInt) return BigInt(value.slice(0, -1));
 
-  const isNoiseValue = typeof value === "string" && value.match(noiseValue);
+  const isNoiseValue = typeof value === "string" && noiseValue.test(value);
   if (isNoiseValue) return value.slice(0, -1);
 
   if (typeof userReviver !== "function") return value;
+
   return userReviver(key, value, context);
 };
 
 /**
- * Faster (2x) and simpler function to parse JSON.
- * Based on JSON.parse's context.source feature, which is not universally available now.
- * Does not support the legacy custom format, used in the first version of this library.
+ * Fast JSON.parse implementation (~2x faster than classic fallback).
+ * Uses JSON.parse's context.source feature to detect integers and convert
+ * large numbers directly to BigInt without string manipulation.
+ *
+ * Does not support legacy custom format from v1 of this library.
+ *
+ * @param {string} text JSON string to parse.
+ * @param {Reviver} [reviver] Transform function to apply to each value.
+ * @returns {any} Parsed JavaScript value.
  */
 const JSONParseV2 = (text, reviver) => {
   return JSON.parse(text, (key, value, context) => {
@@ -53148,9 +53304,21 @@ const stringsOrLargeNumbers =
 const noiseValueWithQuotes = /^"-?\d+n+"$/; // Noise - strings that match the custom format before being converted to it
 
 /**
- * Function to parse JSON.
- * If JSON has number values greater than Number.MAX_SAFE_INTEGER, we convert those values to a custom format, then parse them to BigInt values.
- * Other types of values are not affected and parsed as native JSON.parse() would parse them.
+ * Converts a JSON string into a JavaScript value.
+ *
+ * Supports parsing of large integers using two strategies:
+ * 1. Classic fallback: Marks large numbers with "123n" format, then converts to BigInt
+ * 2. Fast path (JSONParseV2): Uses context.source feature (~2x faster) when available
+ *
+ * All other JSON values are parsed exactly like native JSON.parse().
+ *
+ * @param {string} text A valid JSON string.
+ * @param {Reviver} [reviver]
+ *   A function that transforms the results. This function is called for each member
+ *   of the object. If a member contains nested objects, the nested objects are
+ *   transformed before the parent object is.
+ * @returns {any} The parsed JavaScript value.
+ * @throws {SyntaxError} If text is not valid JSON.
  */
 const JSONParse = (text, reviver) => {
   if (!text) return originalParse(text, reviver);
@@ -53162,7 +53330,7 @@ const JSONParse = (text, reviver) => {
     stringsOrLargeNumbers,
     (text, digits, fractional, exponential) => {
       const isString = text[0] === '"';
-      const isNoise = isString && Boolean(text.match(noiseValueWithQuotes));
+      const isNoise = isString && noiseValueWithQuotes.test(text);
 
       if (isNoise) return text.substring(0, text.length - 1) + 'n"'; // Mark noise values with additional "n" to offset the deletion of one "n" during the processing
 
@@ -53227,7 +53395,7 @@ class RequestError extends Error {
 }
 
 
-;// CONCATENATED MODULE: ./node_modules/.pnpm/@octokit+request@10.0.8/node_modules/@octokit/request/dist-bundle/index.js
+;// CONCATENATED MODULE: ./node_modules/.pnpm/@octokit+request@10.0.10/node_modules/@octokit/request/dist-bundle/index.js
 // pkg/dist-src/index.js
 
 
@@ -53235,7 +53403,7 @@ class RequestError extends Error {
 
 
 // pkg/dist-src/version.js
-var dist_bundle_VERSION = "10.0.8";
+var dist_bundle_VERSION = "10.0.10";
 
 // pkg/dist-src/defaults.js
 var defaults_default = {
@@ -53364,7 +53532,7 @@ async function getResponseData(response) {
   if (!contentType) {
     return response.text().catch(noop);
   }
-  const mimetype = (0,fast_content_type_parse/* safeParse */.xL)(contentType);
+  const mimetype = (0,dist/* parse */.qg)(contentType);
   if (isJSONResponse(mimetype)) {
     let text = "";
     try {
@@ -56615,7 +56783,7 @@ function paginateRest(octokit) {
 paginateRest.VERSION = plugin_paginate_rest_dist_bundle_VERSION;
 
 
-;// CONCATENATED MODULE: ./node_modules/.pnpm/@actions+github@9.0.0/node_modules/@actions/github/lib/utils.js
+;// CONCATENATED MODULE: ./node_modules/.pnpm/@actions+github@9.1.1/node_modules/@actions/github/lib/utils.js
 
 
 // octokit + plugins
@@ -56632,6 +56800,7 @@ const defaults = {
     }
 };
 const GitHub = Octokit.plugin(restEndpointMethods, paginateRest).defaults(defaults);
+
 /**
  * Convience function to correctly format Octokit Options to pass into the constructor.
  *
@@ -56645,10 +56814,15 @@ function getOctokitOptions(token, options) {
     if (auth) {
         opts.auth = auth;
     }
+    // Orchestration ID
+    const userAgent = getUserAgentWithOrchestrationId(opts.userAgent);
+    if (userAgent) {
+        opts.userAgent = userAgent;
+    }
     return opts;
 }
 //# sourceMappingURL=utils.js.map
-;// CONCATENATED MODULE: ./node_modules/.pnpm/@actions+github@9.0.0/node_modules/@actions/github/lib/github.js
+;// CONCATENATED MODULE: ./node_modules/.pnpm/@actions+github@9.1.1/node_modules/@actions/github/lib/github.js
 
 
 const github_context = new Context();
@@ -56663,8 +56837,8 @@ function getOctokit(token, options, ...additionalPlugins) {
     return new GitHubWithPlugins(getOctokitOptions(token, options));
 }
 //# sourceMappingURL=github.js.map
-// EXTERNAL MODULE: ./node_modules/.pnpm/semver@7.7.4/node_modules/semver/index.js
-var semver = __nccwpck_require__(5572);
+// EXTERNAL MODULE: ./node_modules/.pnpm/semver@7.8.5/node_modules/semver/index.js
+var semver = __nccwpck_require__(9046);
 ;// CONCATENATED MODULE: ./src/utils.ts
 /**
  * Escapes `::` sequences to prevent GitHub Actions workflow command injection.
