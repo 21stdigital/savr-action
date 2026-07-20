@@ -37,7 +37,7 @@
     "lint-staged": "17.1.0",
     "package-changed": "3.0.0",
     "prettier": "3.9.5",
-    "typescript": "5.9.3",
+    "typescript": "7.0.2",
     "typescript-eslint": "8.64.0",
     "vite": "8.1.0",
     "vitest": "4.1.10"
