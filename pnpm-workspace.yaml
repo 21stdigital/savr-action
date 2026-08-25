@@ -12,30 +12,22 @@ saveExact: true
 allowBuilds:
   esbuild: true
 
-# Dependency overrides pin transitive packages to non-vulnerable versions (CVE remediation).
-# Blanket pins (no version selector) force every instance to a secure major; range-targeted
-# pins only rewrite specs that fall inside a known-vulnerable window.
+# Dependency overrides pin transitive packages to non-vulnerable versions.
+#
+# A pin earns its place only if it currently changes resolution. Pins that no
+# longer do are not inert: with no version selector they keep overriding the
+# declared spec, which is how vite silently ran 7.3.6 against a declared 8.1.0
+# (#292) and how fast-uri was pushed across a major it did not need (#288).
+# Regressions are caught by the `pnpm audit` gate in test.yml (#291), so stale
+# defensive floors buy nothing that the gate does not already cover.
+#
+# Verified by stripping every pin, reinstalling and auditing: only the two below
+# change anything. The other sixteen were dead.
 overrides:
-  # @octokit chain (transitive via @actions/github)
-  '@octokit/request-error@>=1.0.0 <5.1.1': '>=5.1.1'
-  '@octokit/request@>=1.0.0 <8.4.1': '>=8.4.1'
-  '@octokit/plugin-paginate-rest@>=1.0.0 <9.2.2': '>=9.2.2'
-  # blanket pins to a secure major
+  # Load-bearing, and deliberately crosses a major on a RUNTIME dependency.
+  # @actions/github declares undici ^6.23.0, which resolves to 6.28.0 -- the last
+  # 6.x release. No patched 6.x exists, so the only non-vulnerable option is 7.x.
+  # This one ships: undici is bundled into dist/index.js.
   'undici': '^7.29.0'
-  'fast-xml-parser': '^5.7.0'
-  'lodash': '^4.18.1'
-  'picomatch': '^4.0.4'
-  'postcss': '^8.5.23'
-  'js-yaml': '^4.3.1'
-  'fast-uri': '^4.1.2'
-  # range-targeted CVE floors
-  'minimatch@<3.1.4': '>=3.1.4'
-  'rollup@>=4.0.0 <4.59.0': '>=4.59.0'
-  'handlebars@<4.7.8': '>=4.7.8'
+  # Load-bearing (low severity, dev-only).
   'esbuild@<0.28.1': '>=0.28.1'
-  'fast-xml-builder@<1.1.7': '>=1.1.7'
-  'yaml@<2.8.3': '>=2.8.3'
-  # Bounded, not open-ended: '>=2.1.4' would let the minimatch 5.x/9.x consumers
-  # (which declare ^2.0.x) jump the major to 5.x. Keep them on the patched 2.x.
-  'brace-expansion@<2.1.4': '2.1.4'
-  'brace-expansion@>=3.0.0 <5.0.9': '>=5.0.9'
