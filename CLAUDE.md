@@ -145,7 +145,9 @@ Breaking changes are detected by:
 
 - `dist/index.js` is committed — GitHub Actions execute the bundled output directly, so it must ship with every version
 - The rebuild is split for security (see `docs/adr/0001-dist-rebuild-split-flow.md`): the unprivileged `test.yml` (`pull_request`, no write token) builds `dist/` and uploads it as an artifact when it changed; the privileged `commit-dist.yml` (`workflow_run`, `contents: write`, runs from the default branch) downloads that artifact and commits it without ever executing PR-controlled code
-- Contributors do **not** need to run `pnpm build` before opening a PR; the workflow reconciles it. Local rebuilds are only needed when testing the action outside of CI
+- Locally, `dist/` is rebuilt automatically: a `lint-staged` task runs `pnpm build` and stages `dist/` whenever `src/**/*.ts`, `pnpm-lock.yaml` or `package.json` is staged, so the bundle lands in the same commit as the change (see `docs/adr/0004-build-dist-locally.md`)
+- The CI flow above is therefore the **safety net**, not the normal path — it still carries fork and Dependabot PRs, which cannot run local hooks. Contributors without the hooks do not need to run `pnpm build`; the workflow reconciles it
+- Why local-first: `commit-dist.yml` pushes only _after_ the merge-gating checks pass, and nothing gates on it. A PR merged promptly enough deletes its branch before the push lands, and `dist/` silently goes stale on `main` — this happened in #288 and had to be repaired by #289
 
 ### Dry-run Mode
 
