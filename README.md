@@ -116,6 +116,22 @@ After the workflow is in place, your release process becomes:
 2. Open the GitHub Releases page to review the up-to-date draft
 3. Publish the release manually when your team is ready
 
+### Choosing a version reference
+
+`@v2` is a floating alias tag: it always points at the newest `v2.x.y` release, so patches and features reach you without a pull request. The trade-off is that the action code you run can change without anything in your repository changing — including under a pipeline that was green yesterday.
+
+If your threat model does not allow that, pin the commit SHA instead and let Dependabot propose updates:
+
+```yaml
+- name: Create Release Draft
+  uses: 21stdigital/savr-action@3a429c8eb16c876553465a5f793dfa740a87feca # v2.1.0
+  with:
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+```
+
+> [!NOTE]
+> Replace the SHA above with the commit of the release you want — copy it from that release on the [Releases page](https://github.com/21stdigital/savr-action/releases). Only major aliases exist (`v2`); there are no minor aliases such as `v2.1`, and older majors are reachable by exact tag only.
+
 ## Inputs
 
 | Input                    | Description                                                                                                            | Required | Default          |

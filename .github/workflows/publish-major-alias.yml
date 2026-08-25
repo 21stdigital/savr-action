@@ -1,0 +1,51 @@
+name: Publish Major Alias Tag
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+concurrency:
+  # Never cancel: a half-moved alias tag is worse than a queued run.
+  group: major-alias
+  cancel-in-progress: false
+
+jobs:
+  move-alias:
+    name: Move major alias tag
+    if: github.event.release.prerelease == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve major alias from release tag
+        id: alias
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$TAG" =~ ^v([0-9]+)\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::notice::\"$TAG\" is not a plain vX.Y.Z release tag - no alias to move."
+            exit 0
+          fi
+          echo "alias=v${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout code
+        if: steps.alias.outputs.alias != ''
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          fetch-depth: 0 # Required to resolve the release tag locally
+
+      - name: Move alias tag to release commit
+        if: steps.alias.outputs.alias != ''
+        env:
+          ALIAS: ${{ steps.alias.outputs.alias }}
+          TAG: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          # Lightweight and releaseless by design - see docs/adr/0003-floating-major-alias-tag.md
+          git tag -f "$ALIAS" "$TAG^{commit}"
+          git push -f origin "refs/tags/$ALIAS"
+          echo "::notice::Moved alias $ALIAS to $TAG"
