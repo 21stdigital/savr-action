@@ -108,6 +108,13 @@ jobs:
       - name: Run tests
         run: pnpm test
 
+      # Deliberately last: the dist/ artifact is uploaded earlier in this job, so a
+      # red audit still lets commit-dist.yml sync dist/ (which does not gate on
+      # conclusion). Catches advisories the Dependabot board misses -- the two
+      # databases disagreed on four advisories, see #290.
+      - name: Audit dependencies
+        run: pnpm audit --audit-level=high
+
       - name: Set final commit status
         if: always() && github.event_name == 'workflow_dispatch'
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
