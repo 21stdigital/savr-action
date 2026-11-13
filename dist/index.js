@@ -60077,6 +60077,18 @@ const deleteRelease = async (context, releaseId) => {
     }));
     info(`Release with ID ${String(releaseId)} deleted successfully`);
 };
+const RELEASES_PER_PAGE = 100;
+const listReleasesPage = async (context, page) => {
+    core_debug(`Fetching releases page ${String(page)}`);
+    const { data } = await withGitHubApiRetry('repos.listReleases', () => context.octokit.rest.repos.listReleases({
+        owner: context.owner,
+        repo: context.repo,
+        per_page: RELEASES_PER_PAGE,
+        page
+    }));
+    return data;
+};
+const isSavrManaged = (release) => release.body?.includes(SAVR_MARKER) ?? false;
 // Scans every page, unlike the create/update path, because no current draft
 // anchors an early stop: a stale draft can sit anywhere in the list.
 const listSavrDraftReleases = async (context) => {
@@ -60084,19 +60096,13 @@ const listSavrDraftReleases = async (context) => {
     let page = 1;
     let hasMore = true;
     while (hasMore) {
-        core_debug(`Fetching releases page ${String(page)}`);
-        const { data: pageReleases } = await withGitHubApiRetry('repos.listReleases', () => context.octokit.rest.repos.listReleases({
-            owner: context.owner,
-            repo: context.repo,
-            per_page: 100,
-            page
-        }));
+        const pageReleases = await listReleasesPage(context, page);
         for (const release of pageReleases) {
-            if (release.draft && release.body?.includes(SAVR_MARKER)) {
+            if (release.draft && isSavrManaged(release)) {
                 drafts.push({ id: release.id, tagName: release.tag_name });
             }
         }
-        hasMore = pageReleases.length === 100;
+        hasMore = pageReleases.length === RELEASES_PER_PAGE;
         if (hasMore) {
             page++;
         }
@@ -60110,22 +60116,12 @@ const listDraftReleasesForCreateOrUpdate = async (context, tagName) => {
     let hasMore = true;
     let foundExistingDraftOnPreviousPage = false;
     while (hasMore) {
-        core_debug(`Fetching releases page ${String(page)}`);
-        const { data: pageReleases } = await withGitHubApiRetry('repos.listReleases', () => context.octokit.rest.repos.listReleases({
-            owner: context.owner,
-            repo: context.repo,
-            per_page: 100,
-            page
-        }));
+        const pageReleases = await listReleasesPage(context, page);
         for (const release of pageReleases) {
             if (!release.draft) {
                 continue;
             }
-            const draftRelease = {
-                id: release.id,
-                tag_name: release.tag_name,
-                body: release.body
-            };
+            const draftRelease = { id: release.id, tagName: release.tag_name };
             if (release.tag_name === tagName) {
                 // Keep the first match because GitHub returns releases newest-first.
                 // This preserves pre-refactor behavior (`Array.find`) when duplicate
@@ -60133,11 +60129,11 @@ const listDraftReleasesForCreateOrUpdate = async (context, tagName) => {
                 existingDraft ??= draftRelease;
                 continue;
             }
-            if (release.body?.includes(SAVR_MARKER)) {
+            if (isSavrManaged(release)) {
                 staleDrafts.push(draftRelease);
             }
         }
-        const isFullPage = pageReleases.length === 100;
+        const isFullPage = pageReleases.length === RELEASES_PER_PAGE;
         // Safe early-stop heuristic:
         // GitHub release pages are ordered newest-first. Once we have found the
         // current tag's draft, scanning one additional full page captures nearby
@@ -60224,7 +60220,7 @@ const createOrUpdateRelease = async (context, tagName, releaseName, releaseNotes
             release = data;
         }
         // Clean up other draft releases (keep only the current one)
-        await deleteDraftReleases(context, staleDrafts.filter(({ id }) => id !== release.id).map(({ id, tag_name }) => ({ id, tagName: tag_name })));
+        await deleteDraftReleases(context, staleDrafts.filter(({ id }) => id !== release.id));
         info(`Release ${release.tag_name} created/updated successfully`);
         return {
             id: release.id,
