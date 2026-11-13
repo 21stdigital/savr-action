@@ -10,7 +10,7 @@ SAVR (Semantic Automatic Version Releaser) is a GitHub Action that keeps a live 
 
 ## Commands
 
-- `pnpm check` answers "would CI pass?": build, then `pnpm verify` (the gates, defined once in `package.json`). Add new gates to `verify`, not to `test.yml`. It rebuilds `dist/` in your tree, and it leaves out three CI checks: `pnpm audit` (network-dependent), PR-title commitlint (`validate-pr.yml`) and `check-dist.yml`'s stale-bundle check, which runs only on `main` because a changed `dist/` is allowed on PRs (ADR 0001).
+- `pnpm check` answers "would CI pass?": build, then `pnpm verify` (the gates, defined once in `package.json`). Add new gates to `verify`, not to `test.yml`. It rebuilds `dist/` in your tree, and it leaves out three CI checks: `pnpm audit` (network-dependent), PR-title commitlint (`validate-pr.yml`) and the stale-`dist/` gate. That gate is the one exception to "gates go in `verify`": it compares the committed `dist/` with the build, so locally it would be red on every uncommitted change, and in `test.yml` it must run after the artifact upload (ADR 0005).
 - `pnpm local-action` runs the action locally against a `.env`; copy `.env.example`.
 
 ## Conventions

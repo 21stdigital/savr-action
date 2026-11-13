@@ -129,7 +129,7 @@ jobs:
           git status --porcelain -- dist/
           git --no-pager diff --stat -- dist/
           if [ "$EVENT_NAME" = 'workflow_dispatch' ]; then
-            msg="dist/ still differs from the build after commit-dist.yml rebuilt it, so the build may not be deterministic. Run \`pnpm build\` locally and investigate (see #326)."
+            msg="dist/ differs from the build on a dispatched run. If commit-dist.yml started it, its rebuild did not converge and the build may not be deterministic. Run \`pnpm build\` locally and investigate (see #326)."
           elif [ "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]; then
             msg="dist/ differs from the build, and CI cannot push to forks. Run \`pnpm build\` and commit dist/."
           else
