@@ -17,7 +17,7 @@
     "prepare": "husky",
     "test": "vitest",
     "test:run": "vitest run",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.eslint.json",
     "verify": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test:run"
   },
   "dependencies": {
