@@ -1,201 +1,60 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+SAVR (Semantic Automatic Version Releaser) is a GitHub Action that keeps a live draft GitHub Release, versioned from Conventional Commits, updated on every push. Maintainers publish it by hand.
 
-## Project Overview
+## Toolchain
 
-SAVR (Semantic Automatic Version Releaser) is a GitHub Action that automatically drafts semantic GitHub Releases based on Conventional Commits. It maintains live draft releases that update on every push, allowing teams to see what's coming in the next release at any time.
+- Node follows the action runtime (`runs.using` in `action.yml`), not the latest LTS. `.node-version` is the single source for dev and CI (fnm/nodenv/asdf read it, mise via `mise.toml` after `mise trust`, CI via `node-version-file`). A newer system Node breaks `pnpm install` and so every husky hook: `engineStrict` is on and `@github/local-action` caps `engines.node` at `^24`.
+- A runtime bump (#316) moves in lockstep: `.node-version`, `action.yml` `runs.using`, `package.json` `engines.node` + `@types/node`, and the `@types/node` ignore in `.github/dependabot.yml`.
+- pnpm only, pinned by `packageManager`. pnpm 11 reads its settings (`overrides`, `allowBuilds`, `engineStrict`, `saveExact`) from `pnpm-workspace.yaml` alone; read its header before touching `overrides`, since a stale pin silently keeps overriding the declared version.
 
-## Development Commands
+## Commands
 
-### Toolchain
+- `pnpm check` answers "would CI pass?": build, then `pnpm verify` (the gates, defined once in `package.json`). Add new gates to `verify`, not to `test.yml`. It rebuilds `dist/` in your tree, and it leaves out three CI checks: `pnpm audit` (network-dependent), PR-title commitlint (`validate-pr.yml`) and the dist/ comparison.
+- `pnpm local-action` runs the action locally against a `.env`; copy `.env.example`.
 
-- Node 24, matching the action runtime (`using: node24` in `action.yml`)
-  - `.node-version` is the single source for the dev/CI Node: fnm, nodenv and asdf (legacy version files) read it directly, mise via the settings-only `mise.toml` (run `mise trust` once), and CI's `actions/setup-node` via `node-version-file`
-  - Use it rather than a newer system Node: with `engineStrict` on, `pnpm install` (and so the husky install hooks) fails on Node 26 because `@github/local-action` caps `engines.node` at `^24`
-  - Runtime bumps (#316) move together: `.node-version`, `action.yml` `runs.using`, `package.json` `engines.node` + `@types/node`, and the `@types/node` ignore in `.github/dependabot.yml`
-- Package manager pinned to pnpm 11.9.0 via the `packageManager` field — prefer `pnpm` over `npm`/`yarn` for all scripts. pnpm settings (dependency `overrides`, `allowBuilds`, `engineStrict`, `saveExact`) live in `pnpm-workspace.yaml`, not `package.json`/`.npmrc` — pnpm 11 no longer reads them from those locations
+## Code conventions
 
-### Building
-
-```bash
-pnpm build
-```
-
-Compiles the action using `@vercel/ncc` to bundle everything into `dist/index.js`.
-
-### Testing
-
-```bash
-pnpm test                              # Vitest in watch mode
-pnpm test:run                          # Run all tests once
-pnpm vitest __tests__/commits.test.ts  # Run specific test file
-```
-
-### Local Development
-
-```bash
-pnpm local-action  # Test action locally using @github/local-action
-```
-
-Requires a `.env` file with GitHub token and repository context variables.
-
-### Code Quality
-
-```bash
-pnpm check         # "Would CI pass?" — build, then `pnpm verify`; stops at the first failure
-pnpm prepare       # Setup Husky git hooks
-```
-
-`pnpm check` runs `build` → `typecheck` → `lint` → `format:check` → `test:run` (each is its own script), in CI's order. `test.yml` runs the same gates via `pnpm verify` after its build step (see the comment there for why it's split); add new gates to `verify`, not to the workflow.
-
-What `check` deliberately leaves out of CI's gates:
-
-- `pnpm audit --audit-level=high`: it depends on the network and the advisory database, so it can go red without any code change
-- PR-title commitlint (`validate-pr.yml`)
-- any dist/ comparison: a changed dist/ is allowed on PRs (ADR 0001); only `check-dist.yml` fails on a difference, and only on `main`. Note that `check` rebuilds `dist/` in your working tree
-
-The project uses:
-
-- Husky git hooks in `.husky/`:
-  - `pre-commit` → `lint-staged`
-  - `commit-msg` → `commitlint --edit`
-  - `post-checkout` / `post-merge` / `post-rebase` → `package-changed run "pnpm install"` (auto-reinstalls when `package.json`/`pnpm-lock.yaml` changed across branches — the reason `package-changed` is a devDep)
-- commitlint to enforce Conventional Commits
-- ESLint (v10) flat config in `eslint.config.js` with strict TypeScript checking, import sorting, and **arrow functions enforced** (`prefer-arrow-functions` plugin)
-- Prettier for code formatting
+- Write arrow functions; `prefer-arrow-functions` makes function declarations a lint error.
+- Imports use the `@/` alias for `src/` and need `.js` extensions (NodeNext ESM).
 
 ## Architecture
 
-### Entry Point and Workflow
+`src/main.ts` orchestrates one run: read inputs → fetch tags and commits → pick the bump → render notes → create or update the draft. Each step lives in one module:
 
-- `src/index.ts` - Entry point that calls `run()` from main.ts
-- `src/main.ts` - Orchestrates the entire workflow:
-  1. Validates inputs from action.yml
-  2. Fetches tags and commits from GitHub
-  3. Determines version bump based on commit types
-  4. Compiles release notes from Handlebars template
-  5. Creates or updates draft release
+- `commits.ts`: Conventional Commit parsing and the bump each category implies
+- `version.ts`: semver tags, incrementing, `bump-minor-pre-major`
+- `github.ts`: every Octokit call
+- `templates.ts`: Handlebars release notes. The default template exists twice (`action.yml` and `DEFAULT_TEMPLATE`); `templates.test.ts` fails if they drift
+- `utils.ts`: `sanitizeLogOutput()`, which escapes `::` so logged input cannot inject workflow commands
 
-### Core Modules
+### Release behaviour
 
-#### Commits Module (`src/commits.ts`)
+- Breaking changes come from `!` after the type or a `BREAKING CHANGE:` footer.
+- No tags yet → the first release is `initial-version` (default 1.0.0).
+- New commits are the ones between HEAD and the latest tag's commit; annotated tags are dereferenced first.
+- No bump (e.g. only `chore`/`docs`) → nothing is created or updated.
+- Releases are always drafts. The draft for the same tag name is reused; other drafts carrying `SAVR_MARKER` are deleted, and drafts without it are left alone.
 
-Handles conventional commit parsing and categorization:
+### This repo releases itself
 
-- `parseCommit()` - Parses commit messages using regex matching conventional format: `type(!)(scope): subject`
-- Supported types: feat, fix, chore, docs, refactor, perf, test, ci, style, revert, build
-- `categorizeCommits()` - Groups commits into features, fixes, and breaking changes
-- `determineVersionBump()` - Returns 'major', 'minor', 'patch', or undefined based on commit categories
+`.github/workflows/release-draft.yml` runs SAVR (`uses: ./`) on every push to `main`, so a change to the action is exercised on this repo's own draft release.
 
-#### Version Module (`src/version.ts`)
+## Bundled `dist/`
 
-Manages semantic versioning:
+`dist/` is committed because Actions run the bundle directly; consumers get whatever is on the tag.
 
-- `incrementVersion()` - Increments major/minor/patch and handles pre-release/build metadata
-- `resolveVersionBump()` - Applies `bump-minor-pre-major`: turns a major bump into minor while the current version is `0.x` (Initial Development)
-- `getLatestVersion()` - Finds latest semver tag from list, filters by prefix, sorts using semver comparison
-
-#### GitHub Module (`src/github.ts`)
-
-Interfaces with GitHub API via Octokit:
-
-- `getTags()` - Fetches repository tags
-- `getCommits()` - Paginated commit fetching between two SHAs with early termination at tag
-- `createOrUpdateRelease()` - Checks for existing draft release by tag name and updates or creates new
-- `getAnnotatedTag()` - Dereferences an annotated tag to its target commit SHA
-- `getGitRef()` - Resolves a ref (branch/tag) to its SHA
-- `deleteRelease()` - Deletes a release by ID (used for SAVR-marker draft cleanup)
-
-#### Templates Module (`src/templates.ts`)
-
-Uses Handlebars for release note generation:
-
-- `compileReleaseNotes()` - Compiles template with version and categorized commits
-- One default template with conditional rendering and emoji headers, kept in sync across two locations: `action.yml` (used when user provides no override) and `src/templates.ts` as a hardcoded `DEFAULT_TEMPLATE` fallback (used when the input is empty/whitespace). Both are identical
-- Registers `groupByScope` helper that groups commits by scope, converting scope names to title case and sorting "General" (no scope) last
-
-#### Utils Module (`src/utils.ts`)
-
-- `sanitizeLogOutput()` - Escapes `::` sequences in strings to prevent GitHub Actions workflow command injection in logs
-
-### Configuration Files
-
-#### action.yml
-
-Defines GitHub Action interface with inputs (github-token, tag-prefix, release-branch, dry-run, release-notes-template, initial-version, bump-minor-pre-major) and outputs (skipped, dry-run, version, tag, release-url, release-id). Runs on Node 24.
-
-#### TypeScript Configuration
-
-- Uses path aliases: `@/` maps to `src/`
-- Module system: NodeNext (ESM with .js extensions in imports)
-- Multiple tsconfig files: base config, main config, and eslint-specific config
-
-## Important Implementation Details
-
-### Commit Message Parsing
-
-Breaking changes are detected by:
-
-1. `!` after commit type (e.g., `feat!: breaking change`)
-2. `BREAKING CHANGE:` in commit message footer
-
-### Release Logic
-
-- If no tags exist, creates initial release at `initial-version` (default: 1.0.0)
-- Compares HEAD SHA with latest tag commit SHA (dereferencing annotated tags first) to find new commits
-- Only creates/updates release if version bump is needed (skips if only chore/docs commits)
-- Always creates draft releases (never published automatically)
-- Reuses existing draft release for same tag name
-- Automatically deletes other SAVR-managed draft releases (identified by `SAVR_MARKER`) when creating/updating; non-SAVR draft releases are preserved
-
-### This Repo Releases Itself
-
-`.github/workflows/release-draft.yml` runs SAVR on every push to `main` via `uses: ./`, so the action dogfoods its own draft-release flow. Maintainers publish new versions manually from the GitHub Releases UI.
-
-### Bundled `dist/` and CI Auto-Rebuild
-
-- `dist/index.js` is committed — GitHub Actions execute the bundled output directly, so it must ship with every version
-- The rebuild is split for security (see `docs/adr/0001-dist-rebuild-split-flow.md`): the unprivileged `test.yml` (`pull_request`, no write token) builds `dist/` and uploads it as an artifact when it changed; the privileged `commit-dist.yml` (`workflow_run`, `contents: write`, runs from the default branch) downloads that artifact and commits it without ever executing PR-controlled code
-- Locally, `dist/` is rebuilt automatically: a `lint-staged` task runs `pnpm build` and stages `dist/` whenever `src/**/*.ts`, `pnpm-lock.yaml` or `package.json` is staged, so the bundle lands in the same commit as the change (see `docs/adr/0004-build-dist-locally.md`)
-- The CI flow above is therefore the **safety net**, not the normal path — it still carries fork and Dependabot PRs, which cannot run local hooks. Contributors without the hooks do not need to run `pnpm build`; the workflow reconciles it
-- Why local-first: `commit-dist.yml` pushes only _after_ the merge-gating checks pass, and nothing gates on it. A PR merged promptly enough deletes its branch before the push lands, and `dist/` silently goes stale on `main` — this happened in #288 and had to be repaired by #289
-- Detection: `check-dist.yml` runs `pnpm check` on every push to `main` (plus a daily schedule) and fails if the committed `dist/` differs from the build (modified, added or deleted files). It is read-only and only reports — the fix is a manual `pnpm build` and a `fix(deps): rebuild dist/` PR, as in #325
-- Dependabot auto-merges push with `GITHUB_TOKEN`, which starts no workflow runs, so no `push` workflow (`check-dist.yml`, `release-draft.yml`) runs for them; that is why `check-dist.yml` also has a schedule
-
-### Dry-run Mode
-
-When enabled, logs all actions without making API calls to create/update releases.
+- Normal path: committing anything under `src/**/*.ts`, `pnpm-lock.yaml` or `package.json` triggers a `lint-staged` task that rebuilds and stages `dist/` in the same commit. Why local-first: `docs/adr/0004-build-dist-locally.md`.
+- Safety net for PRs without hooks (forks, Dependabot): `test.yml` uploads a rebuilt `dist/` and `commit-dist.yml` commits it. The unprivileged/privileged split is a security boundary (`docs/adr/0001-dist-rebuild-split-flow.md`). `commit-dist.yml` runs from the default branch, so its changes take effect only after merge.
+- Detection: `check-dist.yml` fails when `main`'s `dist/` is stale, on push and on a daily schedule (Dependabot auto-merges start no push runs). The fix is a manual `pnpm build` in a `fix(deps): rebuild dist/` PR, as in #325.
 
 ## GitHub Issues
 
-- **All issues must conform to the issue templates** in `.github/ISSUE_TEMPLATE/`. Available templates: Bug Report (label: `bug`), Feature Request (label: `enhancement`), Improvement (label: `improvement`), Documentation (label: `documentation`). Fill in all required sections for the chosen template.
-- `blank_issues_enabled: false` — freeform issues are not allowed.
-- When creating issues via `gh issue create`, structure the body with the same section headers and content as the corresponding template form fields.
-- When findings are identified during code reviews, create GitHub issues for them immediately.
-- For test-related findings, use the Improvement template with area set to the relevant module.
-
-## Test Structure
-
-Tests located in `__tests__/`:
-
-- `commits.test.ts` - Commit parsing and categorization
-- `version.test.ts` - Version incrementing and tag filtering
-- `templates.test.ts` - Handlebars template compilation
-- `github.test.ts` - GitHub API interactions
-- `utils.test.ts` - Utility function tests
-- `main.test.ts` - End-to-end workflow testing
+- Every issue follows a template in `.github/ISSUE_TEMPLATE/` (blank issues are disabled). With `gh issue create`, reproduce the template's section headers and apply its label yourself: Bug Report → `bug`, Feature Request → `enhancement`, Improvement → `improvement`, Documentation → `documentation`.
+- File an issue right away for each code-review finding. Test-related findings use Improvement, with the area set to the module.
 
 ## Agent skills
 
-### Issue tracker
-
-Issues live in this repo's GitHub Issues (`21stdigital/savr-action`) via the `gh` CLI; external PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context layout: `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+- Issue tracker: GitHub Issues on `21stdigital/savr-action` via `gh`; external PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
+- Triage labels: the default five roles (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+- Domain docs: `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
