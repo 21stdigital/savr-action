@@ -271,6 +271,44 @@ interface ReleaseDraftSummary {
   body?: string | null
 }
 
+export interface SavrDraftRelease {
+  id: number
+  tagName: string
+}
+
+// Scans every page, unlike the create/update path, because no current draft
+// anchors an early stop: a stale draft can sit anywhere in the list.
+export const listSavrDraftReleases = async (context: GitHubContext): Promise<SavrDraftRelease[]> => {
+  const drafts: SavrDraftRelease[] = []
+  let page = 1
+  let hasMore = true
+
+  while (hasMore) {
+    debug(`Fetching releases page ${String(page)}`)
+    const { data: pageReleases } = await withGitHubApiRetry('repos.listReleases', () =>
+      context.octokit.rest.repos.listReleases({
+        owner: context.owner,
+        repo: context.repo,
+        per_page: 100,
+        page
+      })
+    )
+
+    for (const release of pageReleases) {
+      if (release.draft && release.body?.includes(SAVR_MARKER)) {
+        drafts.push({ id: release.id, tagName: release.tag_name })
+      }
+    }
+
+    hasMore = pageReleases.length === 100
+    if (hasMore) {
+      page++
+    }
+  }
+
+  return drafts
+}
+
 const listDraftReleasesForCreateOrUpdate = async (
   context: GitHubContext,
   tagName: string
@@ -344,6 +382,48 @@ const listDraftReleasesForCreateOrUpdate = async (
   }
 }
 
+// Best-effort: a draft that cannot be deleted is reported and skipped, so
+// cleanup never fails the run.
+export const deleteDraftReleases = async (context: GitHubContext, drafts: SavrDraftRelease[]): Promise<void> => {
+  if (drafts.length === 0) {
+    return
+  }
+
+  info(`Found ${String(drafts.length)} old draft release(s) to delete`)
+  for (const oldDraft of drafts) {
+    info(`Deleting old draft release: ${oldDraft.tagName} (ID: ${String(oldDraft.id)})`)
+
+    try {
+      await deleteRelease(context, oldDraft.id)
+    } catch (deletionError) {
+      const deletionStatus = (deletionError as { status?: number }).status
+
+      if (deletionStatus === 404) {
+        warning(
+          `Old draft release ${oldDraft.tagName} (ID: ${String(oldDraft.id)}) was already deleted by another workflow run`
+        )
+        continue
+      }
+
+      let deletionDetails: string
+      if (deletionError instanceof Error) {
+        const cleanupError = deletionError as RetryableGitHubError
+        deletionDetails = [
+          cleanupError.status != null ? `status ${String(cleanupError.status)}` : undefined,
+          cleanupError.code != null ? `code ${cleanupError.code}` : undefined,
+          deletionError.message
+        ]
+          .filter(part => part != null && part.length > 0)
+          .join(', ')
+      } else {
+        deletionDetails = String(deletionError)
+      }
+
+      warning(`Failed to delete old draft release ${oldDraft.tagName} (ID: ${String(oldDraft.id)}): ${deletionDetails}`)
+    }
+  }
+}
+
 export const createOrUpdateRelease = async (
   context: GitHubContext,
   tagName: string,
@@ -386,45 +466,10 @@ export const createOrUpdateRelease = async (
     }
 
     // Clean up other draft releases (keep only the current one)
-    const otherDrafts = staleDrafts.filter(({ id }) => id !== release.id)
-
-    if (otherDrafts.length > 0) {
-      info(`Found ${String(otherDrafts.length)} old draft release(s) to delete`)
-      for (const oldDraft of otherDrafts) {
-        info(`Deleting old draft release: ${oldDraft.tag_name} (ID: ${String(oldDraft.id)})`)
-
-        try {
-          await deleteRelease(context, oldDraft.id)
-        } catch (deletionError) {
-          const deletionStatus = (deletionError as { status?: number }).status
-
-          if (deletionStatus === 404) {
-            warning(
-              `Old draft release ${oldDraft.tag_name} (ID: ${String(oldDraft.id)}) was already deleted by another workflow run`
-            )
-            continue
-          }
-
-          let deletionDetails: string
-          if (deletionError instanceof Error) {
-            const cleanupError = deletionError as RetryableGitHubError
-            deletionDetails = [
-              cleanupError.status != null ? `status ${String(cleanupError.status)}` : undefined,
-              cleanupError.code != null ? `code ${cleanupError.code}` : undefined,
-              deletionError.message
-            ]
-              .filter(part => part != null && part.length > 0)
-              .join(', ')
-          } else {
-            deletionDetails = String(deletionError)
-          }
-
-          warning(
-            `Failed to delete old draft release ${oldDraft.tag_name} (ID: ${String(oldDraft.id)}): ${deletionDetails}`
-          )
-        }
-      }
-    }
+    await deleteDraftReleases(
+      context,
+      staleDrafts.filter(({ id }) => id !== release.id).map(({ id, tag_name }) => ({ id, tagName: tag_name }))
+    )
 
     info(`Release ${release.tag_name} created/updated successfully`)
     return {

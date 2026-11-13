@@ -3,10 +3,19 @@ import { context, getOctokit } from '@actions/github'
 import { major, valid } from 'semver'
 
 import { categorizeCommits, type CategorizedCommits, determineVersionBump } from './commits.js'
-import { createOrUpdateRelease, getAnnotatedTag, getCommits, getGitRef, getTags, type GitHubContext } from './github.js'
+import {
+  createOrUpdateRelease,
+  deleteDraftReleases,
+  getAnnotatedTag,
+  getCommits,
+  getGitRef,
+  getTags,
+  type GitHubContext,
+  listSavrDraftReleases
+} from './github.js'
 import { compileReleaseNotes } from './templates.js'
 import { sanitizeLogOutput } from './utils.js'
-import { getLatestVersion, incrementVersion, resolveVersionBump } from './version.js'
+import { getLatestVersion, incrementVersion, isSupersededBy, resolveVersionBump, type Tag } from './version.js'
 
 interface ReleaseOutputs {
   skipped: boolean
@@ -83,6 +92,37 @@ export const buildAndPublishRelease = async (
     releaseId: release.id.toString(),
     version,
     tag: release.tagName
+  }
+}
+
+// When no Version Bump is needed, SAVR-managed drafts at or below the latest
+// Version Tag (e.g. a v0.5.0 draft after v1.0.0 was tagged by hand) would
+// otherwise linger and could be published by mistake. Best-effort: failures
+// warn instead of failing a run that has nothing to release anyway.
+const deleteSupersededDrafts = async (
+  githubContext: GitHubContext,
+  latestTag: Tag,
+  tagPrefix: string,
+  dryRun: boolean
+): Promise<void> => {
+  try {
+    const drafts = await listSavrDraftReleases(githubContext)
+    const superseded = drafts.filter(draft => isSupersededBy(draft.tagName, latestTag, tagPrefix))
+
+    if (superseded.length === 0) {
+      return
+    }
+
+    if (dryRun) {
+      superseded.forEach(draft => {
+        info(`Dry run - would delete superseded draft release ${draft.tagName} (ID: ${String(draft.id)})`)
+      })
+      return
+    }
+
+    await deleteDraftReleases(githubContext, superseded)
+  } catch (err) {
+    warning(`Failed to clean up superseded draft releases: ${err instanceof Error ? err.message : String(err)}`)
   }
 }
 
@@ -199,6 +239,7 @@ export const run = async (): Promise<void> => {
   // If HEAD and tag point to the same commit, there are no new commits to process
   if (headData.object.sha === latestTagCommitSha) {
     info('HEAD and latest tag point to the same commit - no changes to release')
+    await deleteSupersededDrafts(githubContext, latestTag, tagPrefix, dryRun)
     setReleaseOutputs({
       skipped: true,
       version: latestTag.version,
@@ -214,6 +255,7 @@ export const run = async (): Promise<void> => {
 
   if (versionBump == null) {
     info('No version bump needed - skipping release creation')
+    await deleteSupersededDrafts(githubContext, latestTag, tagPrefix, dryRun)
     setReleaseOutputs({
       skipped: true,
       version: latestTag.version,

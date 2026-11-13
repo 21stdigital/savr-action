@@ -1,14 +1,22 @@
-import { getBooleanInput, getInput, setOutput, warning } from '@actions/core'
+import { getBooleanInput, getInput, info, setOutput, warning } from '@actions/core'
 import { getOctokit } from '@actions/github'
 import type { Mock } from 'vitest'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { categorizeCommits, determineVersionBump } from '../src/commits.js'
-import { createOrUpdateRelease, getAnnotatedTag, getCommits, getGitRef, getTags } from '../src/github.js'
+import {
+  createOrUpdateRelease,
+  deleteDraftReleases,
+  getAnnotatedTag,
+  getCommits,
+  getGitRef,
+  getTags,
+  listSavrDraftReleases
+} from '../src/github.js'
 import { buildAndPublishRelease, run } from '../src/main.js'
 import { compileReleaseNotes } from '../src/templates.js'
 import type * as VersionModule from '../src/version.js'
-import { getLatestVersion, incrementVersion, resolveVersionBump } from '../src/version.js'
+import { getLatestVersion, incrementVersion, isSupersededBy, resolveVersionBump } from '../src/version.js'
 
 const mockGithubContext = vi.hoisted(() => ({
   ref: 'refs/heads/main',
@@ -92,6 +100,7 @@ describe('main', () => {
     ;(getOctokit as Mock).mockReturnValue(mockOctokit)
     ;(getLatestVersion as Mock).mockReturnValue(undefined)
     ;(determineVersionBump as Mock).mockReturnValue(null)
+    ;(listSavrDraftReleases as Mock).mockResolvedValue([])
     ;(getGitRef as Mock).mockImplementation(async (_context: unknown, ref: string): Promise<GitRefData> => {
       const response = (await mockOctokit.rest.git.getRef({
         owner: 'owner',
@@ -441,6 +450,95 @@ describe('main', () => {
       expect(setOutput).toHaveBeenCalledWith('version', '1.0.0')
       expect(setOutput).toHaveBeenCalledWith('tag', 'v1.0.0')
       expect(setOutput).toHaveBeenCalledWith('dry-run', 'false')
+    })
+
+    describe('superseded draft cleanup', () => {
+      const githubContextArg = { owner: 'owner', repo: 'repo', octokit: mockOctokit }
+
+      // v1.0.0 was pushed by hand; the v0.5.0 draft SAVR made before it is now stale.
+      const setupHandPushedTag = async () => {
+        const actualVersion = await vi.importActual<typeof VersionModule>('../src/version.js')
+        ;(isSupersededBy as Mock).mockImplementation(actualVersion.isSupersededBy)
+        ;(getTags as Mock).mockResolvedValue([{ name: 'v1.0.0', version: '1.0.0' }])
+        ;(getLatestVersion as Mock).mockReturnValue({ name: 'v1.0.0', version: '1.0.0' })
+        ;(listSavrDraftReleases as Mock).mockResolvedValue([
+          { id: 1, tagName: 'v0.5.0' },
+          { id: 2, tagName: 'v1.0.0' },
+          { id: 3, tagName: 'v1.1.0' },
+          { id: 4, tagName: 'api-v0.1.0' }
+        ])
+      }
+
+      const setupNoBumpCommits = () => {
+        mockOctokit.rest.git.getRef.mockImplementation(({ ref }: { ref: string }) =>
+          Promise.resolve({ data: { object: { sha: ref === 'tags/v1.0.0' ? 'tag-sha' : 'head-sha' } } })
+        )
+        ;(getCommits as Mock).mockResolvedValue([
+          { type: 'chore', subject: 'deps update', message: 'chore: deps update', breaking: false }
+        ])
+        ;(categorizeCommits as Mock).mockReturnValue({ features: [], fixes: [], breaking: [] })
+      }
+
+      it('deletes drafts no longer ahead of the latest Version Tag when HEAD is the tagged commit', async () => {
+        await setupHandPushedTag()
+        mockOctokit.rest.git.getRef.mockResolvedValue({ data: { object: { sha: 'same-sha' } } })
+
+        await run()
+
+        expect(deleteDraftReleases).toHaveBeenCalledWith(githubContextArg, [
+          { id: 1, tagName: 'v0.5.0' },
+          { id: 2, tagName: 'v1.0.0' }
+        ])
+        expect(setOutput).toHaveBeenCalledWith('skipped', 'true')
+      })
+
+      it('deletes drafts no longer ahead of the latest Version Tag when no Version Bump is needed', async () => {
+        await setupHandPushedTag()
+        setupNoBumpCommits()
+
+        await run()
+
+        expect(deleteDraftReleases).toHaveBeenCalledWith(githubContextArg, [
+          { id: 1, tagName: 'v0.5.0' },
+          { id: 2, tagName: 'v1.0.0' }
+        ])
+        expect(setOutput).toHaveBeenCalledWith('skipped', 'true')
+      })
+
+      it('only reports superseded drafts in dry-run mode', async () => {
+        await setupHandPushedTag()
+        setupNoBumpCommits()
+        ;(getBooleanInput as Mock).mockImplementation((name: string) => name === 'dry-run')
+
+        await run()
+
+        expect(deleteDraftReleases).not.toHaveBeenCalled()
+        expect(info).toHaveBeenCalledWith('Dry run - would delete superseded draft release v0.5.0 (ID: 1)')
+        expect(info).toHaveBeenCalledWith('Dry run - would delete superseded draft release v1.0.0 (ID: 2)')
+      })
+
+      it('does nothing when no draft is superseded', async () => {
+        await setupHandPushedTag()
+        setupNoBumpCommits()
+        ;(listSavrDraftReleases as Mock).mockResolvedValue([{ id: 3, tagName: 'v1.1.0' }])
+
+        await run()
+
+        expect(deleteDraftReleases).not.toHaveBeenCalled()
+      })
+
+      it('warns but still skips the release when listing drafts fails', async () => {
+        await setupHandPushedTag()
+        setupNoBumpCommits()
+        ;(listSavrDraftReleases as Mock).mockRejectedValue(new Error('Forbidden'))
+
+        await expect(run()).resolves.toBeUndefined()
+
+        expect(deleteDraftReleases).not.toHaveBeenCalled()
+        expect(warning).toHaveBeenCalledWith('Failed to clean up superseded draft releases: Forbidden')
+        expect(setOutput).toHaveBeenCalledWith('skipped', 'true')
+        expect(setOutput).toHaveBeenCalledWith('tag', 'v1.0.0')
+      })
     })
 
     describe('bump-minor-pre-major', () => {

@@ -1,5 +1,5 @@
 import { debug, info, warning } from '@actions/core'
-import { inc, major, rcompare, valid } from 'semver'
+import { inc, lte, major, rcompare, valid } from 'semver'
 
 export type VersionType = 'major' | 'minor' | 'patch'
 
@@ -59,4 +59,17 @@ export const getLatestVersion = (tags: Tag[], tagPrefix: string): Tag | undefine
 
   warning('No valid version tags found')
   return undefined
+}
+
+// A Draft Release is superseded once a Version Tag at or beyond its version
+// exists: publishing it could no longer produce the next version. Tags with
+// another prefix or without a semver version are never superseded, so drafts
+// SAVR cannot reason about are left alone.
+export const isSupersededBy = (draftTagName: string, latestTag: Tag, tagPrefix: string): boolean => {
+  if (!draftTagName.startsWith(tagPrefix)) {
+    return false
+  }
+
+  const draftVersion = draftTagName.slice(tagPrefix.length)
+  return valid(draftVersion) != null && lte(draftVersion, latestTag.version)
 }
