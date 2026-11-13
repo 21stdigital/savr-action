@@ -60527,3 +60527,4 @@ run().catch((error) => {
     }
 });
 
+// deliberately stale: exercises the dist/ gate from #326; commit-dist.yml should remove this line
