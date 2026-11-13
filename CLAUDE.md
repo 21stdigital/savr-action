@@ -53,7 +53,7 @@ What `check` deliberately leaves out of CI's gates:
 
 - `pnpm audit --audit-level=high`: it depends on the network and the advisory database, so it can go red without any code change
 - PR-title commitlint (`validate-pr.yml`)
-- any dist/ comparison: a changed dist/ is allowed on PRs (ADR 0001). Note that `check` rebuilds `dist/` in your working tree
+- any dist/ comparison: a changed dist/ is allowed on PRs (ADR 0001); only `check-dist.yml` fails on a difference, and only on `main`. Note that `check` rebuilds `dist/` in your working tree
 
 The project uses:
 
@@ -160,6 +160,8 @@ Breaking changes are detected by:
 - Locally, `dist/` is rebuilt automatically: a `lint-staged` task runs `pnpm build` and stages `dist/` whenever `src/**/*.ts`, `pnpm-lock.yaml` or `package.json` is staged, so the bundle lands in the same commit as the change (see `docs/adr/0004-build-dist-locally.md`)
 - The CI flow above is therefore the **safety net**, not the normal path — it still carries fork and Dependabot PRs, which cannot run local hooks. Contributors without the hooks do not need to run `pnpm build`; the workflow reconciles it
 - Why local-first: `commit-dist.yml` pushes only _after_ the merge-gating checks pass, and nothing gates on it. A PR merged promptly enough deletes its branch before the push lands, and `dist/` silently goes stale on `main` — this happened in #288 and had to be repaired by #289
+- Detection: `check-dist.yml` runs `pnpm check` on every push to `main` (plus a daily schedule) and fails if the committed `dist/` differs from the build (modified, added or deleted files). It is read-only and only reports — the fix is a manual `pnpm build` and a `fix(deps): rebuild dist/` PR, as in #325
+- Dependabot auto-merges push with `GITHUB_TOKEN`, which starts no workflow runs, so no `push` workflow (`check-dist.yml`, `release-draft.yml`) runs for them; that is why `check-dist.yml` also has a schedule
 
 ### Dry-run Mode
 
