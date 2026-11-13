@@ -1,0 +1,4 @@
+# Make mise read .node-version (the single Node pin) for this project only.
+# Opt-in is required since mise disabled idiomatic version files by default.
+[settings]
+idiomatic_version_file_enable_tools = ["node"]

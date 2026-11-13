@@ -275,6 +275,8 @@ The `groupByScope` helper groups an array of commits by their scope, returning o
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
+Develop on the Node version pinned in `.node-version` (the action runtime). fnm, nodenv and asdf pick it up automatically; with mise, run `mise trust` once to enable the bundled `mise.toml`. A newer Node such as 26 makes `pnpm install` fail on an unsupported engine.
+
 ## License
 
 MIT
