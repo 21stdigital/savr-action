@@ -10,7 +10,10 @@ SAVR (Semantic Automatic Version Releaser) is a GitHub Action that automatically
 
 ### Toolchain
 
-- Node 24 — the action runtime (`using: node24` in `action.yml`). `.node-version` is the single source for the dev/CI Node: version managers pick it up locally (fnm, nodenv, asdf with legacy version files; mise only after opting in once with `mise settings add idiomatic_version_file_enable_tools node`), and CI's `actions/setup-node` reads it via `node-version-file`. Use it rather than your system Node — with `engineStrict` on, `pnpm install` (and so the husky install hooks) fails on newer majors such as 26 because `@github/local-action` caps `engines.node` at `^24`. Bump `.node-version` together with `action.yml`'s `runs.using` (#316)
+- Node 24, matching the action runtime (`using: node24` in `action.yml`)
+  - `.node-version` is the single source for the dev/CI Node: fnm, nodenv and asdf (legacy version files) read it directly, mise via the settings-only `mise.toml` (run `mise trust` once), and CI's `actions/setup-node` via `node-version-file`
+  - Use it rather than a newer system Node: with `engineStrict` on, `pnpm install` (and so the husky install hooks) fails on Node 26 because `@github/local-action` caps `engines.node` at `^24`
+  - Runtime bumps (#316) move together: `.node-version`, `action.yml` `runs.using`, `package.json` `engines.node` + `@types/node`, and the `@types/node` ignore in `.github/dependabot.yml`
 - Package manager pinned to pnpm 11.9.0 via the `packageManager` field — prefer `pnpm` over `npm`/`yarn` for all scripts. pnpm settings (dependency `overrides`, `allowBuilds`, `engineStrict`, `saveExact`) live in `pnpm-workspace.yaml`, not `package.json`/`.npmrc` — pnpm 11 no longer reads them from those locations
 
 ### Building
