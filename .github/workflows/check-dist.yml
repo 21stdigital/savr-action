@@ -5,20 +5,23 @@ name: Check dist/ on main
 # (ADR 0001) can miss -- #288 -> #289 and #321 -> #325 shipped a stale dist/
 # while every PR check was green. This job only reports. Committing to main from
 # CI is the privileged path ADR 0001 avoids, so the token stays read-only.
+#
+# No concurrency group on purpose: every main commit gets its own red/green
+# verdict instead of a "cancelled" one, so the commit that went stale is visible.
 on:
   push:
     branches:
       - main
+  # Backstop for merges that `push` never sees. Dependabot PRs are auto-merged
+  # with GITHUB_TOKEN, and GITHUB_TOKEN pushes start no workflow runs -- #321,
+  # the very commit that shipped a stale dist/, has no push-triggered runs. The
+  # next human merge or this schedule catches it, whichever comes first.
+  schedule:
+    - cron: '17 5 * * *'
   workflow_dispatch:
 
 permissions:
   contents: read
-
-concurrency:
-  # Only the newest main commit matters: it either still carries the stale
-  # dist/ (and is caught) or already fixes it.
-  group: check-dist-${{ github.ref }}
-  cancel-in-progress: true
 
 jobs:
   check-dist:
@@ -75,6 +78,5 @@ jobs:
           echo "Files in dist/ that differ from the build:"
           echo "$changes"
           git --no-pager diff --stat -- dist/
-          # shellcheck disable=SC2016 # the backticks are literal, not an expansion
-          echo '::error title=Stale dist/::dist/ on main is stale; rebuild with `pnpm build` and open a `fix(deps): rebuild dist/` PR (see #325)'
+          echo "::error title=Stale dist/::dist/ on ${GITHUB_REF_NAME} is stale; rebuild with \`pnpm build\` and open a \`fix(deps): rebuild dist/\` PR (see #325)"
           exit 1
