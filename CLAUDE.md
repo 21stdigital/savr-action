@@ -47,7 +47,13 @@ pnpm check         # "Would CI pass?" — build, then `pnpm verify`; stops at th
 pnpm prepare       # Setup Husky git hooks
 ```
 
-`pnpm check` runs exactly what `test.yml` gates on, in CI's order: `build` → `typecheck` → `lint` → `format:check` → `test:run` (each is its own script). CI runs `pnpm build` and `pnpm verify` as separate steps only so the dist/ artifact uploads before any check can fail; add new gates to `verify`, not to the workflow. `check` does not compare dist/ — a changed dist/ is allowed on PRs (ADR 0001).
+`pnpm check` runs `build` → `typecheck` → `lint` → `format:check` → `test:run` (each is its own script), in CI's order. `test.yml` runs the same gates via `pnpm verify` after its build step (see the comment there for why it's split); add new gates to `verify`, not to the workflow.
+
+What `check` deliberately leaves out of CI's gates:
+
+- `pnpm audit --audit-level=high`: it depends on the network and the advisory database, so it can go red without any code change
+- PR-title commitlint (`validate-pr.yml`)
+- any dist/ comparison: a changed dist/ is allowed on PRs (ADR 0001). Note that `check` rebuilds `dist/` in your working tree
 
 The project uses:
 

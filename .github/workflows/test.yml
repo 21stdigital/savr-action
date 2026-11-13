@@ -96,11 +96,10 @@ jobs:
           path: dist/
           retention-days: 1
 
-      # `pnpm check` is `pnpm build && pnpm verify`; it is split here only so the
-      # dist/ artifact above is uploaded before any check can fail. The definition
-      # of "green" (type check, lint, Prettier, tests) lives in the `verify`
-      # script in package.json, so local `pnpm check` and CI cannot drift.
-      - name: Verify (type check, lint, Prettier, tests)
+      # The local `pnpm check` is build + `pnpm verify`. CI splits them only so the
+      # dist/ artifact above is uploaded before any gate can fail. The gates
+      # themselves are defined once, in the `verify` script in package.json.
+      - name: Verify
         run: pnpm verify
 
       # Deliberately last: the dist/ artifact is uploaded earlier in this job, so a
