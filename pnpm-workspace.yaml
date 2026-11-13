@@ -28,6 +28,6 @@ overrides:
   # @actions/github declares undici ^6.23.0, which resolves to 6.28.0 -- the last
   # 6.x release. No patched 6.x exists, so the only non-vulnerable option is 7.x.
   # This one ships: undici is bundled into dist/index.js.
-  'undici': '^7.29.0'
+  'undici': '^7.30.1'
   # Load-bearing (low severity, dev-only).
   'esbuild@<0.28.1': '>=0.28.1'
