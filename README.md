@@ -134,14 +134,15 @@ If your threat model does not allow that, pin the commit SHA instead and let Dep
 
 ## Inputs
 
-| Input                    | Description                                                                                                            | Required | Default          |
-| ------------------------ | ---------------------------------------------------------------------------------------------------------------------- | -------- | ---------------- |
-| `github-token`           | GitHub token for API authentication. Use `GITHUB_TOKEN` with `contents: write` permission, or a PAT with `repo` scope. | Yes      | -                |
-| `tag-prefix`             | Prefix for version tags. Must be <= 20 chars and use only letters, numbers, `.`, `-`, `_`, `/`                         | No       | `v`              |
-| `release-branch`         | The branch to monitor for new commits                                                                                  | No       | `main`           |
-| `dry-run`                | Simulate the process without creating releases                                                                         | No       | `false`          |
-| `release-notes-template` | Template for release notes formatting                                                                                  | No       | Default template |
-| `initial-version`        | The initial version to start from                                                                                      | No       | `1.0.0`          |
+| Input                    | Description                                                                                                               | Required | Default          |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------------- | -------- | ---------------- |
+| `github-token`           | GitHub token for API authentication. Use `GITHUB_TOKEN` with `contents: write` permission, or a PAT with `repo` scope.    | Yes      | -                |
+| `tag-prefix`             | Prefix for version tags. Must be <= 20 chars and use only letters, numbers, `.`, `-`, `_`, `/`                            | No       | `v`              |
+| `release-branch`         | The branch to monitor for new commits                                                                                     | No       | `main`           |
+| `dry-run`                | Simulate the process without creating releases                                                                            | No       | `false`          |
+| `release-notes-template` | Template for release notes formatting                                                                                     | No       | Default template |
+| `initial-version`        | The initial version to start from                                                                                         | No       | `1.0.0`          |
+| `bump-minor-pre-major`   | While the latest version is `0.x`, bump minor instead of major for breaking changes. See [Staying on 0.x](#staying-on-0x) | No       | `false`          |
 
 `tag-prefix` validation is strict and fails the action when invalid:
 
@@ -182,6 +183,24 @@ The action follows these rules to determine version bumps:
 - **Minor** (`0.1.0`): New features (`feat`)
 - **Patch** (`0.0.1`): Bug fixes (`fix`)
 - **None**: Other changes (no version bump)
+
+### Staying on 0.x
+
+Semver treats `0.y.z` as initial development, and many projects signal breaking changes there with a minor bump until their API is stable. By default SAVR bumps major for a breaking change, so `feat!` on `0.3.0` drafts `1.0.0`. Set `bump-minor-pre-major: true` to draft `0.4.0` instead; this follows release-please's option of the same name.
+
+```yaml
+- uses: 21stdigital/savr-action@v2
+  with:
+    github-token: ${{ secrets.GITHUB_TOKEN }}
+    initial-version: 0.1.0 # first release when no version tags exist yet
+    bump-minor-pre-major: true
+```
+
+- `feat` and `fix` still bump minor and patch.
+- Breaking changes are still listed under "Breaking Changes" in the release notes.
+- From `1.0.0` on, the input has no effect.
+- Without existing version tags, SAVR starts at `initial-version` (default `1.0.0`), so set it to a `0.x` version too; SAVR warns if you don't.
+- Moving to `1.0.0` is a deliberate step: edit the draft release, change its tag to `v1.0.0` (with your `tag-prefix`), and publish it.
 
 ## Release Notes
 

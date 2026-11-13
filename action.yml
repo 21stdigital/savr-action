@@ -65,6 +65,10 @@ inputs:
     description: The initial version to start from
     required: false
     default: '1.0.0'
+  bump-minor-pre-major:
+    description: 'While the latest version is 0.x, bump minor instead of major for breaking changes (e.g. 0.3.0 -> 0.4.0). No effect from 1.0.0 on. To start a new project on 0.x, also set initial-version (e.g. 0.1.0).'
+    required: false
+    default: 'false'
 
 # Define your outputs here.
 outputs:

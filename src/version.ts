@@ -1,5 +1,5 @@
 import { debug, info, warning } from '@actions/core'
-import { inc, rcompare, valid } from 'semver'
+import { inc, major, rcompare, valid } from 'semver'
 
 export type VersionType = 'major' | 'minor' | 'patch'
 
@@ -16,6 +16,28 @@ export const incrementVersion = (version: string, type: VersionType): string => 
   }
   info(`New version calculated: ${result}`)
   return result
+}
+
+export interface VersionBumpOptions {
+  bumpMinorPreMajor: boolean
+}
+
+export const resolveVersionBump = (
+  bump: VersionType,
+  currentVersion: string,
+  options: VersionBumpOptions
+): VersionType => {
+  if (bump !== 'major' || !options.bumpMinorPreMajor) {
+    return bump
+  }
+
+  if (major(currentVersion) !== 0) {
+    debug(`bump-minor-pre-major has no effect: ${currentVersion} is past initial development`)
+    return bump
+  }
+
+  info(`Breaking changes in initial development (${currentVersion}) - minor version bump (bump-minor-pre-major)`)
+  return 'minor'
 }
 
 export const getLatestVersion = (tags: Tag[], tagPrefix: string): Tag | undefined => {

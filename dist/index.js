@@ -59840,6 +59840,17 @@ const incrementVersion = (version, type) => {
     info(`New version calculated: ${result}`);
     return result;
 };
+const resolveVersionBump = (bump, currentVersion, options) => {
+    if (bump !== 'major' || !options.bumpMinorPreMajor) {
+        return bump;
+    }
+    if ((0,semver.major)(currentVersion) !== 0) {
+        core_debug(`bump-minor-pre-major has no effect: ${currentVersion} is past initial development`);
+        return bump;
+    }
+    info(`Breaking changes in initial development (${currentVersion}) - minor version bump (bump-minor-pre-major)`);
+    return 'minor';
+};
 const getLatestVersion = (tags, tagPrefix) => {
     core_debug(`Finding latest version from ${String(tags.length)} tags with prefix "${tagPrefix}"`);
     const semverTags = tags
@@ -59919,6 +59930,7 @@ const run = async () => {
     const releaseBranchInput = getInput('release-branch');
     const releaseNotesTemplate = getInput('release-notes-template');
     const dryRun = getBooleanInput('dry-run');
+    const bumpMinorPreMajor = getBooleanInput('bump-minor-pre-major');
     const initialVersion = getInput('initial-version');
     if (!(0,semver.valid)(initialVersion)) {
         throw new Error(`Invalid initial version: "${initialVersion}". Must be a valid semver string (e.g., 1.0.0)`);
@@ -59961,6 +59973,9 @@ const run = async () => {
     const latestTag = getLatestVersion(tags, tagPrefix);
     if (latestTag == null) {
         info(`No existing tags found. Starting from version ${initialVersion}`);
+        if (bumpMinorPreMajor && (0,semver.major)(initialVersion) !== 0) {
+            warning(`bump-minor-pre-major has no effect: there are no version tags yet and initial-version "${initialVersion}" is not a 0.x version. Set initial-version to a 0.x version such as 0.1.0 to stay in initial development.`);
+        }
         const headRef = await getGitRef(githubContext, `heads/${releaseBranch}`);
         const { categorizedCommits } = await processCommits(githubContext, headRef.object.sha);
         setReleaseOutputs(await buildAndPublishRelease(githubContext, {
@@ -60012,7 +60027,7 @@ const run = async () => {
         });
         return;
     }
-    newVersion = incrementVersion(newVersion, versionBump);
+    newVersion = incrementVersion(newVersion, resolveVersionBump(versionBump, newVersion, { bumpMinorPreMajor }));
     setReleaseOutputs(await buildAndPublishRelease(githubContext, {
         version: newVersion,
         tagName: `${tagPrefix}${newVersion}`,

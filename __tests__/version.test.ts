@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { getLatestVersion, incrementVersion } from '../src/version.js'
+import { getLatestVersion, incrementVersion, resolveVersionBump } from '../src/version.js'
 
 describe('version', () => {
   describe('incrementVersion', () => {
@@ -39,6 +39,41 @@ describe('version', () => {
 
     it('should throw for invalid version string', () => {
       expect(() => incrementVersion('not-a-version', 'patch')).toThrow('Failed to increment version')
+    })
+  })
+
+  describe('resolveVersionBump', () => {
+    it('should bump minor for a breaking change in Initial Development when bump-minor-pre-major is on', () => {
+      expect(resolveVersionBump('major', '0.3.0', { bumpMinorPreMajor: true })).toBe('minor')
+    })
+
+    it('should keep a major bump once the project has left Initial Development', () => {
+      expect(resolveVersionBump('major', '1.2.0', { bumpMinorPreMajor: true })).toBe('major')
+    })
+
+    it('should keep a major bump in Initial Development when bump-minor-pre-major is off', () => {
+      expect(resolveVersionBump('major', '0.3.0', { bumpMinorPreMajor: false })).toBe('major')
+    })
+
+    it('should bump minor for a breaking change on a 0.0.x version', () => {
+      expect(resolveVersionBump('major', '0.0.3', { bumpMinorPreMajor: true })).toBe('minor')
+    })
+
+    it('should bump minor for a breaking change on a 0.x pre-release', () => {
+      expect(resolveVersionBump('major', '0.4.0-beta.1', { bumpMinorPreMajor: true })).toBe('minor')
+    })
+
+    it('should leave minor and patch bumps unchanged', () => {
+      expect(resolveVersionBump('minor', '0.3.0', { bumpMinorPreMajor: true })).toBe('minor')
+      expect(resolveVersionBump('patch', '0.3.0', { bumpMinorPreMajor: true })).toBe('patch')
+    })
+
+    it('should produce the next version for a breaking change with bump-minor-pre-major on', () => {
+      const options = { bumpMinorPreMajor: true }
+      expect(incrementVersion('0.3.0', resolveVersionBump('major', '0.3.0', options))).toBe('0.4.0')
+      expect(incrementVersion('0.0.3', resolveVersionBump('major', '0.0.3', options))).toBe('0.1.0')
+      expect(incrementVersion('0.4.0-beta.1', resolveVersionBump('major', '0.4.0-beta.1', options))).toBe('0.4.0')
+      expect(incrementVersion('1.2.0', resolveVersionBump('major', '1.2.0', options))).toBe('2.0.0')
     })
   })
 

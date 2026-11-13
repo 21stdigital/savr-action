@@ -1,4 +1,4 @@
-import { getBooleanInput, getInput, setOutput } from '@actions/core'
+import { getBooleanInput, getInput, setOutput, warning } from '@actions/core'
 import { getOctokit } from '@actions/github'
 import type { Mock } from 'vitest'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -7,7 +7,8 @@ import { categorizeCommits, determineVersionBump } from '../src/commits.js'
 import { createOrUpdateRelease, getAnnotatedTag, getCommits, getGitRef, getTags } from '../src/github.js'
 import { buildAndPublishRelease, run } from '../src/main.js'
 import { compileReleaseNotes } from '../src/templates.js'
-import { getLatestVersion, incrementVersion } from '../src/version.js'
+import type * as VersionModule from '../src/version.js'
+import { getLatestVersion, incrementVersion, resolveVersionBump } from '../src/version.js'
 
 const mockGithubContext = vi.hoisted(() => ({
   ref: 'refs/heads/main',
@@ -440,6 +441,84 @@ describe('main', () => {
       expect(setOutput).toHaveBeenCalledWith('version', '1.0.0')
       expect(setOutput).toHaveBeenCalledWith('tag', 'v1.0.0')
       expect(setOutput).toHaveBeenCalledWith('dry-run', 'false')
+    })
+
+    describe('bump-minor-pre-major', () => {
+      const breakingCommit = { type: 'feat', subject: 'drop old API', message: 'feat!: drop old API', breaking: true }
+
+      const setBumpMinorPreMajor = (enabled: boolean) => {
+        ;(getBooleanInput as Mock).mockImplementation((name: string) => name === 'bump-minor-pre-major' && enabled)
+      }
+
+      const setupBreakingChangeSince = async (version: string) => {
+        const actualVersion = await vi.importActual<typeof VersionModule>('../src/version.js')
+        ;(resolveVersionBump as Mock).mockImplementation(actualVersion.resolveVersionBump)
+        ;(incrementVersion as Mock).mockImplementation(actualVersion.incrementVersion)
+
+        const tagName = `v${version}`
+        ;(getTags as Mock).mockResolvedValue([{ name: tagName, version }])
+        ;(getLatestVersion as Mock).mockReturnValue({ name: tagName, version })
+        mockOctokit.rest.git.getRef.mockImplementation(({ ref }: { ref: string }) =>
+          Promise.resolve({ data: { object: { sha: ref === `tags/${tagName}` ? 'tag-sha' : 'head-sha' } } })
+        )
+        ;(getCommits as Mock).mockResolvedValue([breakingCommit])
+        ;(categorizeCommits as Mock).mockReturnValue({ features: [], fixes: [], breaking: [breakingCommit] })
+        ;(determineVersionBump as Mock).mockReturnValue('major')
+        ;(compileReleaseNotes as Mock).mockReturnValue('Release notes')
+        ;(createOrUpdateRelease as Mock).mockImplementation((_context: unknown, tag: string) =>
+          Promise.resolve({ url: `https://github.com/owner/repo/releases/tag/${tag}`, id: 123, tagName: tag })
+        )
+      }
+
+      it('should draft a minor release for a breaking change in Initial Development', async () => {
+        setBumpMinorPreMajor(true)
+        await setupBreakingChangeSince('0.3.0')
+
+        await run()
+
+        expect(createOrUpdateRelease).toHaveBeenCalledWith(
+          { owner: 'owner', repo: 'repo', octokit: mockOctokit },
+          'v0.4.0',
+          '0.4.0',
+          'Release notes',
+          'head-sha'
+        )
+      })
+
+      it('should draft a major release for a breaking change in Initial Development when off', async () => {
+        setBumpMinorPreMajor(false)
+        await setupBreakingChangeSince('0.3.0')
+
+        await run()
+
+        expect(createOrUpdateRelease).toHaveBeenCalledWith(
+          { owner: 'owner', repo: 'repo', octokit: mockOctokit },
+          'v1.0.0',
+          '1.0.0',
+          'Release notes',
+          'head-sha'
+        )
+      })
+
+      it('should warn when there are no tags and initial-version leaves Initial Development', async () => {
+        setBumpMinorPreMajor(true)
+        setInputs({ 'initial-version': '1.0.0' })
+        setupInitialReleaseFlow()
+
+        await run()
+
+        expect(warning).toHaveBeenCalledWith(expect.stringContaining('initial-version'))
+      })
+
+      it('should not warn when there are no tags and initial-version is in Initial Development', async () => {
+        setBumpMinorPreMajor(true)
+        setInputs({ 'initial-version': '0.1.0' })
+        setupInitialReleaseFlow()
+
+        await run()
+
+        expect(warning).not.toHaveBeenCalled()
+      })
     })
 
     it('should throw for invalid initial-version', async () => {

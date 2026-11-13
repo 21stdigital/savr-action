@@ -1,12 +1,12 @@
-import { getBooleanInput, getInput, info, setOutput } from '@actions/core'
+import { getBooleanInput, getInput, info, setOutput, warning } from '@actions/core'
 import { context, getOctokit } from '@actions/github'
-import { valid } from 'semver'
+import { major, valid } from 'semver'
 
 import { categorizeCommits, type CategorizedCommits, determineVersionBump } from './commits.js'
 import { createOrUpdateRelease, getAnnotatedTag, getCommits, getGitRef, getTags, type GitHubContext } from './github.js'
 import { compileReleaseNotes } from './templates.js'
 import { sanitizeLogOutput } from './utils.js'
-import { getLatestVersion, incrementVersion } from './version.js'
+import { getLatestVersion, incrementVersion, resolveVersionBump } from './version.js'
 
 interface ReleaseOutputs {
   skipped: boolean
@@ -92,6 +92,7 @@ export const run = async (): Promise<void> => {
   const releaseBranchInput = getInput('release-branch')
   const releaseNotesTemplate = getInput('release-notes-template')
   const dryRun = getBooleanInput('dry-run')
+  const bumpMinorPreMajor = getBooleanInput('bump-minor-pre-major')
   const initialVersion = getInput('initial-version')
   if (!valid(initialVersion)) {
     throw new Error(`Invalid initial version: "${initialVersion}". Must be a valid semver string (e.g., 1.0.0)`)
@@ -150,6 +151,11 @@ export const run = async (): Promise<void> => {
 
   if (latestTag == null) {
     info(`No existing tags found. Starting from version ${initialVersion}`)
+    if (bumpMinorPreMajor && major(initialVersion) !== 0) {
+      warning(
+        `bump-minor-pre-major has no effect: there are no version tags yet and initial-version "${initialVersion}" is not a 0.x version. Set initial-version to a 0.x version such as 0.1.0 to stay in initial development.`
+      )
+    }
 
     const headRef = await getGitRef(githubContext, `heads/${releaseBranch}`)
     const { categorizedCommits } = await processCommits(githubContext, headRef.object.sha)
@@ -216,7 +222,7 @@ export const run = async (): Promise<void> => {
     return
   }
 
-  newVersion = incrementVersion(newVersion, versionBump)
+  newVersion = incrementVersion(newVersion, resolveVersionBump(versionBump, newVersion, { bumpMinorPreMajor }))
 
   setReleaseOutputs(
     await buildAndPublishRelease(githubContext, {
