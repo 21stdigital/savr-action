@@ -51,6 +51,23 @@ jobs:
             core.setOutput('exists', String(exists))
             if (!exists) core.info('No dist-rebuild artifact; dist/ was already up to date.')
 
+      # The PR branch is deleted on merge. If the merge still beat this push (only
+      # possible past the Test gate from ADR 0005, e.g. a ruleset bypass), checkout
+      # would fail with a bare `git` exit code. Name the consequence and the fix.
+      # `ls-remote --exit-code` exits 2 for "no such ref"; anything else is a real
+      # error and fails as itself. The repo is public, so no token is needed.
+      - name: Check PR branch still exists
+        if: steps.artifact.outputs.exists == 'true'
+        env:
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          status=0
+          git ls-remote --exit-code --heads "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" "refs/heads/$HEAD_BRANCH" > /dev/null || status=$?
+          if [ "$status" -eq 2 ]; then
+            echo "::error title=PR branch deleted::head branch \`$HEAD_BRANCH\` was deleted before the rebuilt dist/ could be pushed; dist/ on main is now stale. Rebuild with \`pnpm build\` and open a \`fix(deps): rebuild dist/\` PR (see #325)."
+          fi
+          exit "$status"
+
       - name: Check out PR branch
         if: steps.artifact.outputs.exists == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

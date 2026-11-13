@@ -47,8 +47,9 @@ SAVR (Semantic Automatic Version Releaser) is a GitHub Action that keeps a live 
 `dist/` is committed because Actions run the bundle directly; consumers get whatever is on the tag.
 
 - Normal path: committing anything under `src/**/*.ts`, `pnpm-lock.yaml` or `package.json` triggers a `lint-staged` task that rebuilds and stages `dist/` in the same commit. Why local-first: `docs/adr/0004-build-dist-locally.md`.
-- Safety net for PRs without hooks (forks, Dependabot): `test.yml` uploads a rebuilt `dist/` and `commit-dist.yml` commits it. The unprivileged/privileged split is a security boundary (`docs/adr/0001-dist-rebuild-split-flow.md`). `commit-dist.yml` runs from the default branch, so edits to it take effect only after merge.
-- Detection: `check-dist.yml` fails when `main`'s `dist/` is stale, on push and on a daily schedule (Dependabot auto-merges start no push runs); its error names the fix.
+- Safety net for same-repo PRs without hooks (Dependabot): `test.yml` uploads a rebuilt `dist/` and `commit-dist.yml` commits it, then re-dispatches `Test`. It never pushes to forks. The unprivileged/privileged split is a security boundary (`docs/adr/0001-dist-rebuild-split-flow.md`). `commit-dist.yml` runs from the default branch, so edits to it take effect only after merge.
+- Gate: `Test` fails while a PR's `dist/` differs from the build, so nothing merges ahead of its bundle (`docs/adr/0005-gate-merges-on-current-dist.md`). A red `Test` on a Dependabot PR is expected and heals once the safety net pushes; a fork stays red until someone runs `pnpm build`.
+- Backstop: `check-dist.yml` fails when `main`'s `dist/` is stale anyway (ruleset bypass, direct push), on push and on a daily schedule (Dependabot auto-merges start no push runs); its error names the fix.
 
 ## GitHub Issues
 

@@ -77,9 +77,9 @@ jobs:
       # Surface a rebuilt dist/ to the privileged commit-dist.yml workflow via an
       # artifact. This job has no write token, so it can safely run PR code; the
       # artifact is the only thing handed to the privileged side. See
-      # docs/adr/0001-dist-rebuild-split-flow.md.
+      # docs/adr/0001-dist-rebuild-split-flow.md. The check also runs on the
+      # re-dispatched run, where it feeds the stale-dist/ gate at the end of the job.
       - name: Check whether dist/ changed
-        if: github.event_name == 'pull_request'
         id: dist-check
         run: |
           # --porcelain catches modified, deleted and untracked files, so a build
@@ -102,12 +102,41 @@ jobs:
       - name: Verify
         run: pnpm verify
 
-      # Deliberately last: the dist/ artifact is uploaded earlier in this job, so a
-      # red audit still lets commit-dist.yml sync dist/ (which does not gate on
+      # Deliberately after the upload: the dist/ artifact already exists, so a red
+      # audit still lets commit-dist.yml sync dist/ (which does not gate on
       # conclusion). Catches advisories the Dependabot board misses -- the two
       # databases disagreed on four advisories, see #290.
       - name: Audit dependencies
         run: pnpm audit --audit-level=high
+
+      # Gate (ADR 0005): fail while the committed dist/ differs from the build, so
+      # no merge -- auto-merge included -- lands before the rebuilt bundle. Same-repo
+      # PRs heal on their own: commit-dist.yml pushes the artifact uploaded above
+      # and re-dispatches this workflow. Last and on !cancelled() so every other
+      # gate still reports; before the final status so a failure reaches it.
+      - name: Fail if dist/ is stale
+        if: ${{ !cancelled() && steps.dist-check.outcome == 'success' }}
+        env:
+          DIST_CHANGED: ${{ steps.dist-check.outputs.changed }}
+          EVENT_NAME: ${{ github.event_name }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          if [ "$DIST_CHANGED" != 'true' ]; then
+            echo "dist/ matches the build."
+            exit 0
+          fi
+          echo "Files in dist/ that differ from the build:"
+          git status --porcelain -- dist/
+          git --no-pager diff --stat -- dist/
+          if [ "$EVENT_NAME" = 'workflow_dispatch' ]; then
+            msg="dist/ still differs from the build after commit-dist.yml rebuilt it, so the build may not be deterministic. Run \`pnpm build\` locally and investigate (see #326)."
+          elif [ "$HEAD_REPO" != "$GITHUB_REPOSITORY" ]; then
+            msg="dist/ differs from the build, and CI cannot push to forks. Run \`pnpm build\` and commit dist/."
+          else
+            msg="dist/ differs from the build. commit-dist.yml will push the rebuilt dist/ and re-run Test; no action needed. To skip the wait, run \`pnpm build\` and commit dist/."
+          fi
+          echo "::error title=Stale dist/::$msg"
+          exit 1
 
       - name: Set final commit status
         if: always() && github.event_name == 'workflow_dispatch'
