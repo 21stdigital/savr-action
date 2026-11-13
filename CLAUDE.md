@@ -27,7 +27,8 @@ Compiles the action using `@vercel/ncc` to bundle everything into `dist/index.js
 ### Testing
 
 ```bash
-pnpm test                              # Run all tests with Vitest
+pnpm test                              # Vitest in watch mode
+pnpm test:run                          # Run all tests once
 pnpm vitest __tests__/commits.test.ts  # Run specific test file
 ```
 
@@ -42,10 +43,11 @@ Requires a `.env` file with GitHub token and repository context variables.
 ### Code Quality
 
 ```bash
+pnpm check         # "Would CI pass?" — build, then `pnpm verify`; stops at the first failure
 pnpm prepare       # Setup Husky git hooks
-pnpm eslint .      # Run ESLint (no dedicated lint script)
-pnpm prettier --check .  # Check formatting
 ```
+
+`pnpm check` runs exactly what `test.yml` gates on, in CI's order: `build` → `typecheck` → `lint` → `format:check` → `test:run` (each is its own script). CI runs `pnpm build` and `pnpm verify` as separate steps only so the dist/ artifact uploads before any check can fail; add new gates to `verify`, not to the workflow. `check` does not compare dist/ — a changed dist/ is allowed on PRs (ADR 0001).
 
 The project uses:
 

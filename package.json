@@ -10,9 +10,15 @@
   },
   "scripts": {
     "build": "ncc build src/index.ts",
+    "check": "pnpm build && pnpm verify",
+    "format:check": "prettier --check .",
+    "lint": "eslint . --max-warnings 0 --no-warn-ignored",
     "local-action": "local-action . src/main.ts .env",
     "prepare": "husky",
-    "test": "vitest"
+    "test": "vitest",
+    "test:run": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "verify": "pnpm typecheck && pnpm lint && pnpm format:check && pnpm test:run"
   },
   "dependencies": {
     "@actions/core": "3.0.1",
