@@ -4,19 +4,21 @@ SAVR (Semantic Automatic Version Releaser) is a GitHub Action that keeps a live 
 
 ## Toolchain
 
-- Node follows the action runtime (`runs.using` in `action.yml`), not the latest LTS. `.node-version` is the single source for dev and CI (fnm/nodenv/asdf read it, mise via `mise.toml` after `mise trust`, CI via `node-version-file`). A newer system Node breaks `pnpm install` and so every husky hook: `engineStrict` is on and `@github/local-action` caps `engines.node` at `^24`.
+- Node follows the action runtime (`runs.using` in `action.yml`), not the latest LTS. `.node-version` is the single source for dev and CI (mise users run `mise trust` once so `mise.toml` can read it). A newer system Node breaks `pnpm install` and so every husky hook: `engineStrict` is on and `@github/local-action` caps `engines.node` at `^24`.
 - A runtime bump (#316) moves in lockstep: `.node-version`, `action.yml` `runs.using`, `package.json` `engines.node` + `@types/node`, and the `@types/node` ignore in `.github/dependabot.yml`.
 - pnpm only, pinned by `packageManager`. pnpm 11 reads its settings (`overrides`, `allowBuilds`, `engineStrict`, `saveExact`) from `pnpm-workspace.yaml` alone; read its header before touching `overrides`, since a stale pin silently keeps overriding the declared version.
 
 ## Commands
 
-- `pnpm check` answers "would CI pass?": build, then `pnpm verify` (the gates, defined once in `package.json`). Add new gates to `verify`, not to `test.yml`. It rebuilds `dist/` in your tree, and it leaves out three CI checks: `pnpm audit` (network-dependent), PR-title commitlint (`validate-pr.yml`) and the dist/ comparison.
+- `pnpm check` answers "would CI pass?": build, then `pnpm verify` (the gates, defined once in `package.json`). Add new gates to `verify`, not to `test.yml`. It rebuilds `dist/` in your tree, and it leaves out three CI checks: `pnpm audit` (network-dependent), PR-title commitlint (`validate-pr.yml`) and `check-dist.yml`'s stale-bundle check, which runs only on `main` because a changed `dist/` is allowed on PRs (ADR 0001).
 - `pnpm local-action` runs the action locally against a `.env`; copy `.env.example`.
 
-## Code conventions
+## Conventions
 
+- Commit messages are Conventional Commits (commitlint on `commit-msg`), and on `main` their types decide this repo's own next version.
 - Write arrow functions; `prefer-arrow-functions` makes function declarations a lint error.
-- Imports use the `@/` alias for `src/` and need `.js` extensions (NodeNext ESM).
+- Write internal imports as relative paths with a `.js` extension (`./commits.js`), as NodeNext ESM requires.
+- `package-changed` looks unused but backs the `post-checkout`/`post-merge`/`post-rebase` hooks, which rerun `pnpm install` when the lockfile changed across a branch switch.
 
 ## Architecture
 
@@ -45,8 +47,8 @@ SAVR (Semantic Automatic Version Releaser) is a GitHub Action that keeps a live 
 `dist/` is committed because Actions run the bundle directly; consumers get whatever is on the tag.
 
 - Normal path: committing anything under `src/**/*.ts`, `pnpm-lock.yaml` or `package.json` triggers a `lint-staged` task that rebuilds and stages `dist/` in the same commit. Why local-first: `docs/adr/0004-build-dist-locally.md`.
-- Safety net for PRs without hooks (forks, Dependabot): `test.yml` uploads a rebuilt `dist/` and `commit-dist.yml` commits it. The unprivileged/privileged split is a security boundary (`docs/adr/0001-dist-rebuild-split-flow.md`). `commit-dist.yml` runs from the default branch, so its changes take effect only after merge.
-- Detection: `check-dist.yml` fails when `main`'s `dist/` is stale, on push and on a daily schedule (Dependabot auto-merges start no push runs). The fix is a manual `pnpm build` in a `fix(deps): rebuild dist/` PR, as in #325.
+- Safety net for PRs without hooks (forks, Dependabot): `test.yml` uploads a rebuilt `dist/` and `commit-dist.yml` commits it. The unprivileged/privileged split is a security boundary (`docs/adr/0001-dist-rebuild-split-flow.md`). `commit-dist.yml` runs from the default branch, so edits to it take effect only after merge.
+- Detection: `check-dist.yml` fails when `main`'s `dist/` is stale, on push and on a daily schedule (Dependabot auto-merges start no push runs); its error names the fix.
 
 ## GitHub Issues
 
