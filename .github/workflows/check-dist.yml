@@ -1,0 +1,80 @@
+name: Check dist/ on main
+
+# Detects a stale bundle on main: rebuilds dist/ and fails if the committed
+# dist/ differs from the build. Both local-build (ADR 0004) and commit-dist.yml
+# (ADR 0001) can miss -- #288 -> #289 and #321 -> #325 shipped a stale dist/
+# while every PR check was green. This job only reports. Committing to main from
+# CI is the privileged path ADR 0001 avoids, so the token stays read-only.
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  # Only the newest main commit matters: it either still carries the stale
+  # dist/ (and is caught) or already fixes it.
+  group: check-dist-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-dist:
+    name: Check dist/ is up to date
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .node-version
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        name: Setup pnpm cache
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Build + every CI gate, from the single definition in package.json (#327).
+      - name: Check
+        id: check
+        run: pnpm check
+
+      # Runs even when `pnpm check` failed in a later gate (lint, a flaky test),
+      # so those failures cannot hide a stale bundle. If the build itself failed
+      # before writing, dist/ shows no difference and the Check step is the signal.
+      - name: Fail if dist/ is stale
+        if: ${{ !cancelled() && steps.check.outcome != 'skipped' }}
+        run: |
+          # --porcelain catches modified, deleted and untracked files, so a build
+          # that adds or removes a dist/ file is detected, not just modifications.
+          changes="$(git status --porcelain -- dist/)"
+          if [ -z "$changes" ]; then
+            echo "dist/ matches the build."
+            exit 0
+          fi
+          echo "Files in dist/ that differ from the build:"
+          echo "$changes"
+          git --no-pager diff --stat -- dist/
+          # shellcheck disable=SC2016 # the backticks are literal, not an expansion
+          echo '::error title=Stale dist/::dist/ on main is stale; rebuild with `pnpm build` and open a `fix(deps): rebuild dist/` PR (see #325)'
+          exit 1
