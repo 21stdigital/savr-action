@@ -82,6 +82,7 @@ Handles conventional commit parsing and categorization:
 Manages semantic versioning:
 
 - `incrementVersion()` - Increments major/minor/patch and handles pre-release/build metadata
+- `resolveVersionBump()` - Applies `bump-minor-pre-major`: turns a major bump into minor while the current version is `0.x` (Initial Development)
 - `getLatestVersion()` - Finds latest semver tag from list, filters by prefix, sorts using semver comparison
 
 #### GitHub Module (`src/github.ts`)
@@ -111,7 +112,7 @@ Uses Handlebars for release note generation:
 
 #### action.yml
 
-Defines GitHub Action interface with inputs (github-token, tag-prefix, release-branch, dry-run, release-notes-template, initial-version) and outputs (skipped, dry-run, version, tag, release-url, release-id). Runs on Node 24.
+Defines GitHub Action interface with inputs (github-token, tag-prefix, release-branch, dry-run, release-notes-template, initial-version, bump-minor-pre-major) and outputs (skipped, dry-run, version, tag, release-url, release-id). Runs on Node 24.
 
 #### TypeScript Configuration
 

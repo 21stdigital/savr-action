@@ -19,3 +19,15 @@ _Avoid_: pending release, pre-release (a pre-release is a published release, whi
 **Release Reference**:
 The `owner/repo@ref` string a consuming workflow uses to call SAVR. It resolves to an Alias Tag, a Version Tag, or a commit SHA.
 _Avoid_: version pin, action version
+
+**Breaking Change**:
+A commit that declares it breaks compatibility, by a `!` after its type or a `BREAKING CHANGE:` footer. It is always listed as breaking in the release notes, but does not always cause a major Version Bump.
+_Avoid_: major change
+
+**Version Bump**:
+Which part of the version — major, minor or patch — the next Draft Release increments over the latest Version Tag. It follows from the commits since that tag and from whether the project is in Initial Development.
+_Avoid_: release type, increment
+
+**Initial Development**:
+The phase in which the latest Version Tag's major version is `0` (`0.y.z`), the name semver itself gives it. A project can choose to have a Breaking Change bump minor instead of major here; it leaves the phase only when a human publishes `1.0.0` deliberately.
+_Avoid_: pre-major, pre-1.0, unstable
