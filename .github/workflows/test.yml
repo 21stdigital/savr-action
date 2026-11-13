@@ -96,17 +96,11 @@ jobs:
           path: dist/
           retention-days: 1
 
-      - name: Type check
-        run: pnpm -s tsc --noEmit
-
-      - name: Lint
-        run: pnpm eslint . --max-warnings 0 --no-warn-ignored
-
-      - name: Prettier check
-        run: pnpm prettier --check .
-
-      - name: Run tests
-        run: pnpm test
+      # The local `pnpm check` is build + `pnpm verify`. CI splits them only so the
+      # dist/ artifact above is uploaded before any gate can fail. The gates
+      # themselves are defined once, in the `verify` script in package.json.
+      - name: Verify
+        run: pnpm verify
 
       # Deliberately last: the dist/ artifact is uploaded earlier in this job, so a
       # red audit still lets commit-dist.yml sync dist/ (which does not gate on
