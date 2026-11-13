@@ -18,13 +18,28 @@ updates:
         update-types:
           - 'minor'
           - 'patch'
+      # Dev-dependency majors land in one self-updating PR instead of one PR per
+      # package and version. They are still merged by hand (ADR 0002): grouped
+      # PRs report their highest update type, so auto-merge skips this group.
+      dev-dependencies-major:
+        dependency-type: 'development'
+        update-types:
+          - 'major'
     # Limit to 5 open PRs at a time to avoid overwhelming CI
     open-pull-requests-limit: 5
-    # Ignore certain packages or specific version updates
-    # Uncomment and customize as needed
-    # ignore:
-    #   - dependency-name: "express"
-    #     versions: ["4.x", "5.x"]
+    ignore:
+      # @types/node follows the action runtime (`runs.using: node24` in
+      # action.yml), not the latest Node LTS. Newer types would accept APIs that
+      # are missing at runtime. The GitHub Actions runner does not ship node26
+      # yet; lift this together with the runtime switch tracked in #316.
+      - dependency-name: '@types/node'
+        update-types:
+          - 'version-update:semver-major'
+      # typescript-eslint's peer range caps typescript at <6.1.0. Lift this once
+      # typescript-eslint supports newer TypeScript (incl. the native TS 7).
+      - dependency-name: 'typescript'
+        versions:
+          - '>=6.1.0'
 
   # Monitor and update GitHub Actions
   - package-ecosystem: 'github-actions'

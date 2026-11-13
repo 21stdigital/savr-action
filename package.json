@@ -23,7 +23,7 @@
   "devDependencies": {
     "@commitlint/cli": "21.2.4",
     "@commitlint/config-conventional": "21.2.4",
-    "@commitlint/types": "20.5.0",
+    "@commitlint/types": "21.2.3",
     "@eslint/js": "10.0.1",
     "@github/local-action": "7.0.1",
     "@types/node": "24.13.2",
@@ -32,7 +32,7 @@
     "eslint": "10.14.0",
     "eslint-plugin-import": "2.32.0",
     "eslint-plugin-prefer-arrow-functions": "3.10.2",
-    "eslint-plugin-simple-import-sort": "13.0.0",
+    "eslint-plugin-simple-import-sort": "14.0.0",
     "husky": "9.1.7",
     "lint-staged": "17.6.0",
     "package-changed": "3.0.0",
