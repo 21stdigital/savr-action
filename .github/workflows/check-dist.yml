@@ -1,9 +1,10 @@
 name: Check dist/ on main
 
 # Detects a stale bundle on main: rebuilds dist/ and fails if the committed
-# dist/ differs from the build. Both local-build (ADR 0004) and commit-dist.yml
-# (ADR 0001) can miss -- #288 -> #289 and #321 -> #325 shipped a stale dist/
-# while every PR check was green. This job only reports. Committing to main from
+# dist/ differs from the build. #288 -> #289 and #321 -> #325 shipped a stale
+# dist/ while every PR check was green; the Test gate (ADR 0005) now blocks such
+# merges, so this job is the backstop for what the gate cannot see: ruleset
+# bypasses and direct pushes to main. It only reports. Committing to main from
 # CI is the privileged path ADR 0001 avoids, so the token stays read-only.
 #
 # No concurrency group on purpose: every main commit gets its own red/green

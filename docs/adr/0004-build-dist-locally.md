@@ -22,5 +22,6 @@ The race is not a one-off. It threatens any PR merged promptly after its checks 
 
 - ADR 0001's security argument is untouched. The privileged workflow still never executes PR-controlled code; it simply has nothing to do in the common case.
 - Fork and Dependabot PRs cannot run local hooks, so `commit-dist.yml` still carries them. It is now exercised rarely, which is worth knowing: a regression in it will surface later than it used to.
+- For those PRs the race remained, and it was lost again in #321. ADR 0005 closes it by gating the merge on a current `dist/`, so the premise above that "nothing gates on it" no longer holds.
 - Commits touching `src/`, the lockfile or `package.json` pay an `ncc` build (~2.5s).
 - `dist/` diffs now appear in the authoring commit rather than a follow-up, making review noisier but the history honest about what shipped.

@@ -16,4 +16,5 @@ accepted
 
 - `workflow_run` uses the workflow definition from the **default branch only**, so changes to `commit-dist.yml` cannot be exercised end-to-end from a PR — they take effect only after merge to `main`.
 - The privileged job must re-assert the same-repo guard (`workflow_run` also fires for fork builds) and must still re-dispatch `test.yml` / `validate-pr.yml`, because commits authored by `GITHUB_TOKEN` do not trigger further workflows.
+- ADR 0005 later made `Test` fail while a PR's `dist/` is stale. That is not the "fail the check" option rejected above: the auto-commit stays and heals same-repo PRs, and the failure only keeps them from merging ahead of it.
 - Defense-in-depth already in place reduces residual risk on the unprivileged side: third-party actions pinned to commit SHAs, pnpm 11 `allowBuilds` blocking untrusted install scripts, and `--frozen-lockfile`.
