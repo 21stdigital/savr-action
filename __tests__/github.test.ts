@@ -3,10 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   createOrUpdateRelease,
+  deleteDraftReleases,
   deleteRelease,
   getCommits,
   getTags,
   type GitHubContext,
+  listSavrDraftReleases,
   SAVR_MARKER,
   withGitHubApiRetry
 } from '../src/github.js'
@@ -735,6 +737,75 @@ describe('github', () => {
         release_id: 2
       })
       expect(warning).toHaveBeenCalledWith('Failed to delete old draft release v1.0.1 (ID: 1): status 403, Forbidden')
+    })
+  })
+
+  describe('deleteDraftReleases', () => {
+    it('deletes every given draft and keeps going past failures', async () => {
+      const notFoundError = Object.assign(new Error('Not Found'), { status: 404 })
+      const forbiddenError = Object.assign(new Error('Forbidden'), { status: 403 })
+      mockOctokit.rest.repos.deleteRelease
+        .mockRejectedValueOnce(notFoundError)
+        .mockRejectedValueOnce(forbiddenError)
+        .mockResolvedValueOnce({ data: {} })
+
+      await deleteDraftReleases(githubContext, [
+        { id: 1, tagName: 'v0.4.0' },
+        { id: 2, tagName: 'v0.5.0' },
+        { id: 3, tagName: 'v0.6.0' }
+      ])
+
+      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledTimes(3)
+      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenLastCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        release_id: 3
+      })
+      expect(warning).toHaveBeenCalledWith(
+        'Old draft release v0.4.0 (ID: 1) was already deleted by another workflow run'
+      )
+      expect(warning).toHaveBeenCalledWith('Failed to delete old draft release v0.5.0 (ID: 2): status 403, Forbidden')
+    })
+  })
+
+  describe('listSavrDraftReleases', () => {
+    const release = (id: number, tagName: string, overrides: { draft?: boolean; body?: string | null } = {}) => ({
+      id,
+      tag_name: tagName,
+      draft: overrides.draft ?? true,
+      html_url: `https://github.com/test-owner/test-repo/releases/tag/${tagName}`,
+      body: overrides.body === undefined ? `Release notes\n${SAVR_MARKER}` : overrides.body
+    })
+
+    it('returns only SAVR-managed draft releases', async () => {
+      mockOctokit.rest.repos.listReleases.mockResolvedValue({
+        data: [
+          release(1, 'v1.1.0'),
+          release(2, 'v1.0.1', { body: 'Manually created draft release' }),
+          release(3, 'v1.0.2', { body: null }),
+          release(4, 'v1.0.0', { draft: false })
+        ]
+      })
+
+      await expect(listSavrDraftReleases(githubContext)).resolves.toEqual([{ id: 1, tagName: 'v1.1.0' }])
+    })
+
+    it('scans every page of releases', async () => {
+      const firstPage = Array.from({ length: 100 }, (_, index) =>
+        release(index + 100, `v0.0.${String(index)}`, { draft: false })
+      )
+      mockOctokit.rest.repos.listReleases
+        .mockResolvedValueOnce({ data: firstPage })
+        .mockResolvedValueOnce({ data: [release(1, 'v0.5.0')] })
+
+      await expect(listSavrDraftReleases(githubContext)).resolves.toEqual([{ id: 1, tagName: 'v0.5.0' }])
+      expect(mockOctokit.rest.repos.listReleases).toHaveBeenCalledTimes(2)
+      expect(mockOctokit.rest.repos.listReleases).toHaveBeenLastCalledWith({
+        owner: 'test-owner',
+        repo: 'test-repo',
+        per_page: 100,
+        page: 2
+      })
     })
   })
 

@@ -35,7 +35,7 @@ SAVR (Semantic Automatic Version Releaser) is a GitHub Action that keeps a live 
 - Breaking changes come from `!` after the type or a `BREAKING CHANGE:` footer.
 - No tags yet → the first release is `initial-version` (default 1.0.0).
 - New commits are the ones between HEAD and the latest tag's commit; annotated tags are dereferenced first.
-- No bump (e.g. only `chore`/`docs`) → nothing is created or updated.
+- No bump (e.g. only `chore`/`docs`), or HEAD is the latest tag's commit → nothing is created or updated, but SAVR-managed drafts at or below the latest tag (same prefix, valid semver) are deleted, e.g. after a tag pushed by hand (#312).
 - Releases are always drafts. The draft for the same tag name is reused; other drafts carrying `SAVR_MARKER` are deleted, and drafts without it are left alone.
 
 ### This repo releases itself

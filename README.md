@@ -173,6 +173,7 @@ If your threat model does not allow that, pin the commit SHA instead and let Dep
 - On every push, SAVR calculates the next semantic version based on commits since the last tag
 - It creates or updates a single draft release with the generated release notes
 - **Important:** When a new draft release is created, SAVR attempts to delete previous SAVR-managed draft releases so only the latest draft is kept. Manually created draft releases are not affected.
+- When there is nothing to release (no new commits since the latest tag, or no bumping commits), SAVR still deletes SAVR-managed drafts whose version is not ahead of the latest tag. A tag you push by hand, e.g. `v1.0.0` on top of a `v0.5.0` draft, therefore doesn't leave a stale draft behind. In dry-run mode SAVR only logs which drafts it would delete.
 - Cleanup is best-effort: if deleting an older SAVR-managed draft races with another workflow run or GitHub returns a transient error, the current release update still succeeds and the action logs a warning instead of failing.
 
 ## Version Bump Rules

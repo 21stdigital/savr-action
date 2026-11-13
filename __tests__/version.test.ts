@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { getLatestVersion, incrementVersion, resolveVersionBump } from '../src/version.js'
+import { getLatestVersion, incrementVersion, isSupersededBy, resolveVersionBump } from '../src/version.js'
 
 describe('version', () => {
   describe('incrementVersion', () => {
@@ -178,6 +178,37 @@ describe('version', () => {
       }
       const latest = getLatestVersion(tags, 'v')
       expect(latest).toEqual({ name: 'v1.0.149', version: '1.0.149' })
+    })
+  })
+
+  describe('isSupersededBy', () => {
+    const latestTag = { name: 'v1.0.0', version: '1.0.0' }
+
+    it('treats a draft for an older version as superseded', () => {
+      expect(isSupersededBy('v0.5.0', latestTag, 'v')).toBe(true)
+    })
+
+    it('treats a draft for the latest version itself as superseded', () => {
+      expect(isSupersededBy('v1.0.0', latestTag, 'v')).toBe(true)
+    })
+
+    it('keeps a draft whose version is still ahead of the latest Version Tag', () => {
+      expect(isSupersededBy('v1.0.1', latestTag, 'v')).toBe(false)
+      expect(isSupersededBy('v2.0.0', latestTag, 'v')).toBe(false)
+    })
+
+    it('keeps a draft with a different tag prefix', () => {
+      expect(isSupersededBy('api-v0.5.0', latestTag, 'v')).toBe(false)
+      expect(isSupersededBy('0.5.0', latestTag, 'v')).toBe(false)
+    })
+
+    it('keeps a draft whose tag is not a semver version', () => {
+      expect(isSupersededBy('vnext', latestTag, 'v')).toBe(false)
+    })
+
+    it('works with an empty tag prefix', () => {
+      expect(isSupersededBy('0.5.0', { name: '1.0.0', version: '1.0.0' }, '')).toBe(true)
+      expect(isSupersededBy('1.1.0', { name: '1.0.0', version: '1.0.0' }, '')).toBe(false)
     })
   })
 })
