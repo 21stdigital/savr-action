@@ -62,3 +62,4 @@ SAVR (Semantic Automatic Version Releaser) is a GitHub Action that keeps a live 
 - Issue tracker: GitHub Issues on `21stdigital/savr-action` via `gh`; external PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
 - Triage labels: the default five roles (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
 - Domain docs: `GLOSSARY.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+- Review rules lint can't enforce (glossary terms in code, borrowed public names such as `bump-minor-pre-major`): `CODING_STANDARDS.md`.
