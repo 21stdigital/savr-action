@@ -5,8 +5,12 @@ SAVR (Semantic Automatic Version Releaser) keeps a draft GitHub Release up to da
 ## Language
 
 **Version Tag**:
-A git tag naming one immutable point in the version history, e.g. `v2.1.0`. It never moves.
+A git tag naming one immutable point in the version history, e.g. `v2.1.0`. It consists of a Tag Prefix and a version, and it never moves.
 _Avoid_: release tag, semver tag
+
+**Tag Prefix**:
+The fixed text before the version in a Version Tag, e.g. `v` in `v2.1.0` or `api-v` in `api-v0.2.0`. SAVR only reads and maintains Version Tags and Draft Releases with its own Tag Prefix.
+_Avoid_: version prefix, tag namespace
 
 **Alias Tag**:
 A git tag that points at whichever Version Tag is currently newest within a major line, e.g. `v2`. It moves, is lightweight, and carries no Release.
@@ -17,7 +21,7 @@ An unpublished GitHub Release that SAVR maintains for the next version. It has n
 _Avoid_: pending release, pre-release (a pre-release is a published release, which a Draft Release is not)
 
 **Superseded Draft**:
-A Draft Release whose version is no longer ahead of the latest Version Tag, typically because a human tagged that version (or a later one) instead of publishing the draft. SAVR removes it.
+A Draft Release that no longer describes the next release: SAVR now drafts a different version, a human tagged its version or a later one instead of publishing it, or there is nothing left to release. SAVR removes it.
 _Avoid_: stale draft (reserved for a draft nobody has published for too long), obsolete draft
 
 **Release Reference**:
