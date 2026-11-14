@@ -1,0 +1,95 @@
+name: Stale Draft Release
+
+# Nags when SAVR's Draft Release has been waiting too long to be published
+# (#286). Publishing stays manual on purpose; this only makes the wait visible.
+#
+# Age = time since the last published release, not the draft's created_at:
+# SAVR recreates the draft whenever the Version Bump changes (patch -> minor),
+# which would reset created_at while nothing has shipped. With no published
+# release yet, the oldest SAVR draft's created_at is used.
+#
+# One tracking issue, found by label: opened when the threshold is crossed,
+# its body edited silently on later runs (no comments, so no notifications),
+# closed once no SAVR draft is waiting or the wait is back under the threshold.
+#
+# If this nag rots or gets muted, the honest fallback is to accept that drafts
+# sometimes sit -- not to auto-publish.
+on:
+  schedule:
+    - cron: '23 6 * * 1' # Mondays
+  workflow_dispatch:
+
+permissions:
+  # Draft releases are only listed for tokens with push access.
+  contents: write
+  issues: write
+
+concurrency:
+  group: stale-draft-release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check for a stale draft release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Open, update or close the tracking issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          THRESHOLD_DAYS: '14'
+          LABEL: stale-draft-release
+          # Keep in sync with SAVR_MARKER in src/github.ts (asserted by __tests__/workflows.test.ts).
+          SAVR_MARKER: '<!-- savr-managed-release -->'
+        run: |
+          set -euo pipefail
+
+          draft=$(gh api --paginate "repos/$GH_REPO/releases?per_page=100" \
+            --jq '.[] | select(.draft and ((.body // "") | contains(env.SAVR_MARKER)))
+                  | {tag: .tag_name, url: .html_url, created: .created_at} | @json' \
+            | jq -s 'sort_by(.created) | first // empty')
+
+          latest=$(gh api "repos/$GH_REPO/releases/latest" \
+            --jq '{tag: .tag_name, published: .published_at} | @json' 2>/dev/null || true)
+
+          issue=$(gh issue list --label "$LABEL" --state open --json number --jq '.[0].number // empty')
+
+          days=0
+          if [ -n "$draft" ]; then
+            if [ -n "$latest" ]; then
+              since=$(jq -r '.published' <<<"$latest")
+              since_text="The last published release, \`$(jq -r '.tag' <<<"$latest")\`, is from ${since%%T*}"
+            else
+              since=$(jq -r '.created' <<<"$draft")
+              since_text="Nothing has been published yet; the draft dates from ${since%%T*}"
+            fi
+            days=$(( ( $(date -u +%s) - $(date -u -d "$since" +%s) ) / 86400 ))
+          fi
+
+          if [ -z "$draft" ] || [ "$days" -lt "$THRESHOLD_DAYS" ]; then
+            echo "No stale draft (draft: ${draft:-none}, days since last release: $days)."
+            if [ -n "$issue" ]; then
+              gh issue close "$issue" --comment "No SAVR draft release has been waiting longer than $THRESHOLD_DAYS days any more. Closing."
+            fi
+            exit 0
+          fi
+
+          tag=$(jq -r '.tag' <<<"$draft")
+          url=$(jq -r '.url' <<<"$draft")
+          body_file=$(mktemp)
+          cat > "$body_file" <<EOF
+          The SAVR draft release [\`$tag\`]($url) is waiting to be published. $since_text ($days days ago, threshold $THRESHOLD_DAYS).
+
+          Publishing is manual on purpose (#286): review the draft and publish it when it is ready. If the wait is deliberate, leave this issue open; it is updated weekly without notifications and closes itself once no draft is waiting.
+          EOF
+
+          if [ -n "$issue" ]; then
+            gh issue edit "$issue" --body-file "$body_file"
+            echo "Updated #$issue ($tag, $days days)."
+          else
+            gh label create "$LABEL" --color FBCA04 \
+              --description "SAVR draft release waiting to be published" --force
+            gh issue create --title "SAVR draft release is waiting to be published" \
+              --label "$LABEL" --body-file "$body_file"
+          fi
