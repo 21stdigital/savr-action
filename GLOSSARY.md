@@ -16,6 +16,10 @@ _Avoid_: floating tag, moving tag, major tag, rolling tag
 An unpublished GitHub Release that SAVR maintains for the next version. It has no Version Tag yet — GitHub creates that when a human publishes it.
 _Avoid_: pending release, pre-release (a pre-release is a published release, which a Draft Release is not)
 
+**Superseded Draft**:
+A Draft Release whose version is no longer ahead of the latest Version Tag, typically because a human tagged that version (or a later one) instead of publishing the draft. SAVR removes it.
+_Avoid_: stale draft (reserved for a draft nobody has published for too long), obsolete draft
+
 **Release Reference**:
 The `owner/repo@ref` string a consuming workflow uses to call SAVR. It resolves to an Alias Tag, a Version Tag, or a commit SHA.
 _Avoid_: version pin, action version
