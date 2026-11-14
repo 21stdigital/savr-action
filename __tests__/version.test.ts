@@ -210,5 +210,18 @@ describe('version', () => {
       expect(isSupersededBy('0.5.0', { name: '1.0.0', version: '1.0.0' }, '')).toBe(true)
       expect(isSupersededBy('1.1.0', { name: '1.0.0', version: '1.0.0' }, '')).toBe(false)
     })
+
+    it('matches v-prefixed drafts with an empty tag prefix, like getLatestVersion does', () => {
+      // semver accepts a leading `v`, so `tag-prefix: ''` covers `v0.5.0` as well as `0.5.0`.
+      // The "different tag prefix" case above only applies to a non-empty prefix.
+      expect(isSupersededBy('v0.5.0', { name: '1.0.0', version: '1.0.0' }, '')).toBe(true)
+      expect(isSupersededBy('v1.1.0', { name: '1.0.0', version: '1.0.0' }, '')).toBe(false)
+
+      // getLatestVersion keeps the `v` in `version` here; isSupersededBy must still compare correctly.
+      const latest = { name: 'v1.0.0', version: 'v1.0.0' }
+      expect(getLatestVersion([{ name: 'v1.0.0', version: '' }], '')).toEqual(latest)
+      expect(isSupersededBy('v0.5.0', latest, '')).toBe(true)
+      expect(isSupersededBy('v1.1.0', latest, '')).toBe(false)
+    })
   })
 })
