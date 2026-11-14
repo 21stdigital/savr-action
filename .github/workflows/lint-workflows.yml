@@ -1,0 +1,40 @@
+name: Lint Workflows
+
+# Lints workflow YAML and the shell in `run:` blocks with actionlint + shellcheck
+# (#336). Not part of `pnpm verify`: the npm builds of actionlint are WASM and
+# ship without shellcheck, which is what catches unquoted `$GITHUB_ENV` and
+# similar. The image bundles both. Locally: `actionlint` (brew/mise) from the
+# repo root. Composite actions under .github/actions/ are not covered by actionlint.
+#
+# No `paths` filter on purpose: the job takes seconds, and an unfiltered check
+# can be made required in the ruleset without blocking PRs that touch no workflow.
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-workflows-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Pinned by digest; Dependabot does not update docker:// references, so
+      # bump tag and digest together by hand.
+      - name: Run actionlint
+        uses: docker://rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+        with:
+          args: -color
