@@ -60342,15 +60342,25 @@ const incrementVersion = (version, type) => {
     info(`New version calculated: ${result}`);
     return result;
 };
+// Initial Development: semver's 0.y.z phase, where the major version is 0.
+const isInitialDevelopment = (version) => (0,semver.major)(version) === 0;
+// With no Version Tags yet, the first Draft Release is initial-version. A non-0.x
+// start leaves Initial Development before it began, so bump-minor-pre-major can
+// never apply; warn instead of silently ignoring the input.
+const checkInitialVersion = (initialVersion, options) => {
+    if (options.bumpMinorPreMajor && !isInitialDevelopment(initialVersion)) {
+        warning(`bump-minor-pre-major has no effect: there are no version tags yet and initial-version "${initialVersion}" is not a 0.x version. Set initial-version to a 0.x version such as 0.1.0 to stay in Initial Development.`);
+    }
+};
 const resolveVersionBump = (bump, currentVersion, options) => {
     if (bump !== 'major' || !options.bumpMinorPreMajor) {
         return bump;
     }
-    if ((0,semver.major)(currentVersion) !== 0) {
-        core_debug(`bump-minor-pre-major has no effect: ${currentVersion} is past initial development`);
+    if (!isInitialDevelopment(currentVersion)) {
+        core_debug(`bump-minor-pre-major has no effect: ${currentVersion} is past Initial Development`);
         return bump;
     }
-    info(`Breaking changes in initial development (${currentVersion}) - minor version bump (bump-minor-pre-major)`);
+    info(`Breaking changes in Initial Development (${currentVersion}) - minor version bump (bump-minor-pre-major)`);
     return 'minor';
 };
 const getLatestVersion = (tags, tagPrefix) => {
@@ -60509,9 +60519,7 @@ const run = async () => {
     const latestTag = getLatestVersion(tags, tagPrefix);
     if (latestTag == null) {
         info(`No existing tags found. Starting from version ${initialVersion}`);
-        if (bumpMinorPreMajor && (0,semver.major)(initialVersion) !== 0) {
-            warning(`bump-minor-pre-major has no effect: there are no version tags yet and initial-version "${initialVersion}" is not a 0.x version. Set initial-version to a 0.x version such as 0.1.0 to stay in initial development.`);
-        }
+        checkInitialVersion(initialVersion, { bumpMinorPreMajor });
         const headRef = await getGitRef(githubContext, `heads/${releaseBranch}`);
         const { categorizedCommits } = await processCommits(githubContext, headRef.object.sha);
         setReleaseOutputs(await buildAndPublishRelease(githubContext, {

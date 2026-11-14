@@ -1,6 +1,6 @@
 import { getBooleanInput, getInput, info, setOutput, warning } from '@actions/core'
 import { context, getOctokit } from '@actions/github'
-import { major, valid } from 'semver'
+import { valid } from 'semver'
 
 import { categorizeCommits, type CategorizedCommits, determineVersionBump } from './commits.js'
 import {
@@ -15,7 +15,14 @@ import {
 } from './github.js'
 import { compileReleaseNotes } from './templates.js'
 import { sanitizeLogOutput } from './utils.js'
-import { getLatestVersion, incrementVersion, isSupersededBy, resolveVersionBump, type Tag } from './version.js'
+import {
+  checkInitialVersion,
+  getLatestVersion,
+  incrementVersion,
+  isSupersededBy,
+  resolveVersionBump,
+  type Tag
+} from './version.js'
 
 interface ReleaseOutputs {
   skipped: boolean
@@ -191,11 +198,7 @@ export const run = async (): Promise<void> => {
 
   if (latestTag == null) {
     info(`No existing tags found. Starting from version ${initialVersion}`)
-    if (bumpMinorPreMajor && major(initialVersion) !== 0) {
-      warning(
-        `bump-minor-pre-major has no effect: there are no version tags yet and initial-version "${initialVersion}" is not a 0.x version. Set initial-version to a 0.x version such as 0.1.0 to stay in initial development.`
-      )
-    }
+    checkInitialVersion(initialVersion, { bumpMinorPreMajor })
 
     const headRef = await getGitRef(githubContext, `heads/${releaseBranch}`)
     const { categorizedCommits } = await processCommits(githubContext, headRef.object.sha)
