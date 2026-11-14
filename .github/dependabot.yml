@@ -44,7 +44,11 @@ updates:
 
   # Monitor and update GitHub Actions
   - package-ecosystem: 'github-actions'
-    directory: '/'
+    # `/` covers .github/workflows and the root action.yml only; the composite
+    # actions under .github/actions pin their own action SHAs.
+    directories:
+      - '/'
+      - '/.github/actions/*'
     schedule:
       interval: 'weekly'
     # Group all GitHub Actions updates into a single PR
