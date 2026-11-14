@@ -1,0 +1,44 @@
+name: Set commit status
+description: >-
+  Post a commit status for a check that commit-dist.yml re-dispatched. Such
+  runs are `workflow_dispatch` runs, so they report on the PR head through a
+  commit status. A local action loads from the checkout, so run it after
+  actions/checkout.
+
+inputs:
+  sha:
+    description: Commit to attach the status to.
+    required: true
+  context:
+    description: Status name; must match the required check it stands in for.
+    required: true
+  state:
+    description: '`pending`, or the job status (`job.status`) once the job is done.'
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set commit status
+      # The caller's `if` decides whether to report; once called, always post,
+      # including the final status after a failed job.
+      if: always()
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+      # Inputs go in through env, not interpolated into the script, so no input
+      # value can inject code.
+      env:
+        STATUS_SHA: ${{ inputs.sha }}
+        STATUS_CONTEXT: ${{ inputs.context }}
+        STATUS_STATE: ${{ inputs.state }}
+      with:
+        script: |
+          const { STATUS_SHA, STATUS_CONTEXT, STATUS_STATE } = process.env;
+          const stateMap = { pending: 'pending', success: 'success', failure: 'failure', cancelled: 'error' };
+          await github.rest.repos.createCommitStatus({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            sha: STATUS_SHA,
+            state: stateMap[STATUS_STATE] ?? 'error',
+            context: STATUS_CONTEXT,
+            description: STATUS_STATE === 'pending' ? 'Running...' : STATUS_STATE,
+          });

@@ -29,47 +29,22 @@ jobs:
       HEAD_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.head_sha || github.event.pull_request.head.sha }}
 
     steps:
-      - name: Set pending commit status
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
-        with:
-          script: |
-            await github.rest.repos.createCommitStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              sha: '${{ inputs.head_sha }}',
-              state: 'pending',
-              context: 'Test',
-              description: 'Running...',
-            });
-
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        id: checkout
         with:
           ref: ${{ env.HEAD_SHA }}
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+      # Local actions load from the checkout, so status reporting starts after it.
+      - name: Set pending commit status
+        if: github.event_name == 'workflow_dispatch'
+        uses: ./.github/actions/commit-status
         with:
-          node-version-file: .node-version
+          sha: ${{ inputs.head_sha }}
+          context: Test
+          state: pending
 
-      - name: Get pnpm store directory
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
-
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        name: Setup pnpm cache
-        with:
-          path: ${{ env.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Set up pnpm and install dependencies
+        uses: ./.github/actions/setup-pnpm
 
       - name: Build
         run: pnpm build
@@ -138,17 +113,21 @@ jobs:
           echo "::error title=Stale dist/::$msg"
           exit 1
 
+      # The final status loads from the checkout. If checkout itself failed, fetch
+      # only .github/actions from this workflow's commit so the status still posts
+      # and the check turns red instead of hanging (ADR 0005: Test reports on every
+      # path).
+      - name: Restore status action after a failed checkout
+        if: always() && github.event_name == 'workflow_dispatch' && steps.checkout.outcome == 'failure'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: .github/actions
+
       - name: Set final commit status
         if: always() && github.event_name == 'workflow_dispatch'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        uses: ./.github/actions/commit-status
         with:
-          script: |
-            const stateMap = { success: 'success', failure: 'failure', cancelled: 'error' };
-            await github.rest.repos.createCommitStatus({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              sha: '${{ inputs.head_sha }}',
-              state: stateMap['${{ job.status }}'] || 'error',
-              context: 'Test',
-              description: '${{ job.status }}',
-            });
+          sha: ${{ inputs.head_sha }}
+          context: Test
+          state: ${{ job.status }}
