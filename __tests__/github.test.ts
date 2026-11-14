@@ -2,13 +2,10 @@ import { warning } from '@actions/core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
-  createOrUpdateRelease,
-  deleteDraftReleases,
-  deleteRelease,
+  createReleaseStore,
   getCommits,
   getTags,
   type GitHubContext,
-  listSavrDraftReleases,
   SAVR_MARKER,
   withGitHubApiRetry
 } from '../src/github.js'
@@ -48,763 +45,111 @@ describe('github', () => {
     })
   })
 
-  describe('deleteRelease', () => {
-    it('should delete a release by ID', async () => {
-      mockOctokit.rest.repos.deleteRelease.mockResolvedValue({ data: {} })
-
-      await deleteRelease(githubContext, 123)
-
-      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        release_id: 123
-      })
-    })
-  })
-
-  describe('createOrUpdateRelease', () => {
-    it('retries listReleases on transient 5xx errors', async () => {
-      const serviceUnavailable = Object.assign(new Error('Service Unavailable'), {
-        status: 503,
-        response: { headers: { 'retry-after': '0' } }
-      })
-      mockOctokit.rest.repos.listReleases.mockRejectedValueOnce(serviceUnavailable).mockResolvedValueOnce({ data: [] })
-      mockOctokit.rest.repos.createRelease.mockResolvedValue({
-        data: {
-          id: 1,
-          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0',
-          tag_name: 'v1.0.0'
-        }
-      })
-
-      const result = await createOrUpdateRelease(githubContext, 'v1.0.0', '1.0.0', 'Release notes')
-
-      expect(mockOctokit.rest.repos.listReleases).toHaveBeenCalledTimes(2)
-      expect(result.tagName).toBe('v1.0.0')
-    })
-
-    it('should create a new draft release when none exists', async () => {
-      mockOctokit.rest.repos.listReleases.mockResolvedValue({ data: [] })
-      mockOctokit.rest.repos.createRelease.mockResolvedValue({
-        data: {
-          id: 1,
-          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0',
-          tag_name: 'v1.0.0'
-        }
-      })
-
-      const result = await createOrUpdateRelease(githubContext, 'v1.0.0', '1.0.0', 'Release notes')
-
-      expect(mockOctokit.rest.repos.createRelease).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        tag_name: 'v1.0.0',
-        name: '1.0.0',
-        body: `Release notes\n${SAVR_MARKER}`,
-        draft: true
-      })
-      expect(result).toEqual({
-        id: 1,
-        url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0',
-        tagName: 'v1.0.0'
-      })
-    })
-
-    it('should update an existing draft release with the same tag', async () => {
-      mockOctokit.rest.repos.listReleases.mockResolvedValue({
-        data: [
-          {
-            id: 1,
-            tag_name: 'v1.0.0',
-            draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0',
-            body: `Release notes\n${SAVR_MARKER}`
-          }
-        ]
-      })
-      mockOctokit.rest.repos.updateRelease.mockResolvedValue({
-        data: {
-          id: 1,
-          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0',
-          tag_name: 'v1.0.0'
-        }
-      })
-
-      const result = await createOrUpdateRelease(githubContext, 'v1.0.0', '1.0.0', 'Updated release notes')
-
-      expect(mockOctokit.rest.repos.updateRelease).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        tag_name: 'v1.0.0',
-        name: '1.0.0',
-        body: `Updated release notes\n${SAVR_MARKER}`,
-        draft: true,
-        release_id: 1
-      })
-      expect(mockOctokit.rest.repos.deleteRelease).not.toHaveBeenCalled()
-      expect(result.id).toBe(1)
-    })
-
-    it('should delete old draft releases when creating a new version', async () => {
-      mockOctokit.rest.repos.listReleases.mockResolvedValue({
-        data: [
-          {
-            id: 1,
-            tag_name: 'v1.0.1',
-            draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.1',
-            body: `Release notes\n${SAVR_MARKER}`
-          },
-          {
-            id: 2,
-            tag_name: 'v1.0.0',
-            draft: false,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0',
-            body: 'Release notes'
-          }
-        ]
-      })
-      mockOctokit.rest.repos.createRelease.mockResolvedValue({
-        data: {
-          id: 3,
-          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.1.0',
-          tag_name: 'v1.1.0'
-        }
-      })
-      mockOctokit.rest.repos.deleteRelease.mockResolvedValue({ data: {} })
-
-      const result = await createOrUpdateRelease(githubContext, 'v1.1.0', '1.1.0', 'Release notes')
-
-      expect(mockOctokit.rest.repos.createRelease).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        tag_name: 'v1.1.0',
-        name: '1.1.0',
-        body: `Release notes\n${SAVR_MARKER}`,
-        draft: true
-      })
-      // Should delete the old draft (v1.0.1) but not the published release (v1.0.0)
-      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledTimes(1)
-      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        release_id: 1
-      })
-      expect(result.id).toBe(3)
-    })
-
-    it('should delete multiple old draft releases when creating a new version', async () => {
-      mockOctokit.rest.repos.listReleases.mockResolvedValue({
-        data: [
-          {
-            id: 1,
-            tag_name: 'v1.0.1',
-            draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.1',
-            body: `Release notes\n${SAVR_MARKER}`
-          },
-          {
-            id: 2,
-            tag_name: 'v1.0.2',
-            draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.2',
-            body: `Release notes\n${SAVR_MARKER}`
-          },
-          {
-            id: 3,
-            tag_name: 'v1.0.0',
-            draft: false,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0',
-            body: 'Release notes'
-          }
-        ]
-      })
-      mockOctokit.rest.repos.createRelease.mockResolvedValue({
-        data: {
-          id: 4,
-          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.1.0',
-          tag_name: 'v1.1.0'
-        }
-      })
-      mockOctokit.rest.repos.deleteRelease.mockResolvedValue({ data: {} })
-
-      await createOrUpdateRelease(githubContext, 'v1.1.0', '1.1.0', 'Release notes')
-
-      // Should delete both old drafts (v1.0.1 and v1.0.2)
-      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledTimes(2)
-      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        release_id: 1
-      })
-      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        release_id: 2
-      })
-    })
-
-    it('should not delete the current draft when updating it', async () => {
-      mockOctokit.rest.repos.listReleases.mockResolvedValue({
-        data: [
-          {
-            id: 1,
-            tag_name: 'v1.0.1',
-            draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.1',
-            body: `Release notes\n${SAVR_MARKER}`
-          },
-          {
-            id: 2,
-            tag_name: 'v1.1.0',
-            draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.1.0',
-            body: `Updated release notes\n${SAVR_MARKER}`
-          }
-        ]
-      })
-      mockOctokit.rest.repos.updateRelease.mockResolvedValue({
-        data: {
-          id: 2,
-          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.1.0',
-          tag_name: 'v1.1.0'
-        }
-      })
-      mockOctokit.rest.repos.deleteRelease.mockResolvedValue({ data: {} })
-
-      await createOrUpdateRelease(githubContext, 'v1.1.0', '1.1.0', 'Updated release notes')
-
-      // Should delete only the old draft (v1.0.1), not the current one being updated (v1.1.0)
-      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledTimes(1)
-      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        release_id: 1
-      })
-    })
-
-    it('should set target_commitish when provided for release creation', async () => {
-      mockOctokit.rest.repos.listReleases.mockResolvedValue({ data: [] })
-      mockOctokit.rest.repos.createRelease.mockResolvedValue({
-        data: {
-          id: 1,
-          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0',
-          tag_name: 'v1.0.0'
-        }
-      })
-
-      await createOrUpdateRelease(githubContext, 'v1.0.0', '1.0.0', 'Release notes', 'release-branch-sha')
-
-      expect(mockOctokit.rest.repos.createRelease).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        tag_name: 'v1.0.0',
-        name: '1.0.0',
-        body: `Release notes\n${SAVR_MARKER}`,
-        draft: true,
-        target_commitish: 'release-branch-sha'
-      })
-    })
-
-    it('should set target_commitish when provided for release update', async () => {
-      mockOctokit.rest.repos.listReleases.mockResolvedValue({
-        data: [
-          {
-            id: 1,
-            tag_name: 'v1.0.0',
-            draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0',
-            body: `Release notes\n${SAVR_MARKER}`
-          }
-        ]
-      })
-      mockOctokit.rest.repos.updateRelease.mockResolvedValue({
-        data: {
-          id: 1,
-          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.0',
-          tag_name: 'v1.0.0'
-        }
-      })
-
-      await createOrUpdateRelease(githubContext, 'v1.0.0', '1.0.0', 'Updated release notes', 'release-branch-sha')
-
-      expect(mockOctokit.rest.repos.updateRelease).toHaveBeenCalledWith(
-        expect.objectContaining({ target_commitish: 'release-branch-sha', release_id: 1 })
-      )
-    })
-
-    it('should paginate releases when finding existing drafts', async () => {
-      const pageOneReleases = Array.from({ length: 100 }, (_, index) => {
-        const releaseNumber = String(index + 1)
-
-        return {
-          id: index + 1,
-          tag_name: `v0.${releaseNumber}.0`,
-          draft: false,
-          html_url: `https://github.com/test-owner/test-repo/releases/tag/v0.${releaseNumber}.0`
-        }
-      })
-
-      mockOctokit.rest.repos.listReleases.mockResolvedValueOnce({ data: pageOneReleases }).mockResolvedValueOnce({
-        data: [
-          {
-            id: 101,
-            tag_name: 'v1.9.9',
-            draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.9.9',
-            body: `Release notes\n${SAVR_MARKER}`
-          }
-        ]
-      })
-      mockOctokit.rest.repos.createRelease.mockResolvedValue({
-        data: {
-          id: 102,
-          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v2.0.0',
-          tag_name: 'v2.0.0'
-        }
-      })
-      mockOctokit.rest.repos.deleteRelease.mockResolvedValue({ data: {} })
-
-      await createOrUpdateRelease(githubContext, 'v2.0.0', '2.0.0', 'Release notes')
-
-      expect(mockOctokit.rest.repos.listReleases).toHaveBeenCalledTimes(2)
-      expect(mockOctokit.rest.repos.listReleases).toHaveBeenNthCalledWith(1, {
-        owner: 'test-owner',
-        repo: 'test-repo',
-        per_page: 100,
-        page: 1
-      })
-      expect(mockOctokit.rest.repos.listReleases).toHaveBeenNthCalledWith(2, {
-        owner: 'test-owner',
-        repo: 'test-repo',
-        per_page: 100,
-        page: 2
-      })
-      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        release_id: 101
-      })
-    })
-
-    it('should continue pagination for cleanup even when current draft is found on page one', async () => {
-      const pageOneReleases = [
-        {
-          id: 1,
-          tag_name: 'v2.0.0',
-          draft: true,
-          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v2.0.0',
-          body: `Existing release notes\n${SAVR_MARKER}`
-        },
-        ...Array.from({ length: 99 }, (_, index) => {
-          const releaseNumber = String(index + 1)
-          return {
-            id: index + 2,
-            tag_name: `v0.${releaseNumber}.0`,
-            draft: false,
-            html_url: `https://github.com/test-owner/test-repo/releases/tag/v0.${releaseNumber}.0`
-          }
-        })
-      ]
-
-      mockOctokit.rest.repos.listReleases.mockResolvedValueOnce({ data: pageOneReleases }).mockResolvedValueOnce({
-        data: [
-          {
-            id: 101,
-            tag_name: 'v1.9.9',
-            draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.9.9',
-            body: `Release notes\n${SAVR_MARKER}`
-          }
-        ]
-      })
-      mockOctokit.rest.repos.updateRelease.mockResolvedValue({
-        data: {
-          id: 1,
-          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v2.0.0',
-          tag_name: 'v2.0.0'
-        }
-      })
-      mockOctokit.rest.repos.deleteRelease.mockResolvedValue({ data: {} })
-
-      await createOrUpdateRelease(githubContext, 'v2.0.0', '2.0.0', 'Release notes')
-
-      expect(mockOctokit.rest.repos.listReleases).toHaveBeenCalledTimes(2)
-      expect(mockOctokit.rest.repos.updateRelease).toHaveBeenCalledWith(
-        expect.objectContaining({
-          owner: 'test-owner',
-          repo: 'test-repo',
-          release_id: 1,
-          tag_name: 'v2.0.0',
-          name: '2.0.0',
-          body: `Release notes\n${SAVR_MARKER}`,
-          draft: true
-        })
-      )
-      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledTimes(1)
-      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        release_id: 101
-      })
-    })
-
-    it('should keep the first matching draft when duplicate tag drafts appear across pages', async () => {
-      const pageOneReleases = [
-        {
-          id: 10,
-          tag_name: 'v2.0.0',
-          draft: true,
-          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v2.0.0',
-          body: `Newest duplicate draft\n${SAVR_MARKER}`
-        },
-        ...Array.from({ length: 99 }, (_, index) => {
-          const releaseNumber = String(index + 1)
-          return {
-            id: index + 11,
-            tag_name: `v0.${releaseNumber}.0`,
-            draft: false,
-            html_url: `https://github.com/test-owner/test-repo/releases/tag/v0.${releaseNumber}.0`
-          }
-        })
-      ]
-
-      mockOctokit.rest.repos.listReleases.mockResolvedValueOnce({ data: pageOneReleases }).mockResolvedValueOnce({
-        data: [
-          {
-            id: 110,
-            tag_name: 'v2.0.0',
-            draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v2.0.0',
-            body: `Older duplicate draft\n${SAVR_MARKER}`
-          },
-          {
-            id: 111,
-            tag_name: 'v1.9.9',
-            draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.9.9',
-            body: `Release notes\n${SAVR_MARKER}`
-          }
-        ]
-      })
-      mockOctokit.rest.repos.updateRelease.mockResolvedValue({
-        data: {
-          id: 10,
-          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v2.0.0',
-          tag_name: 'v2.0.0'
-        }
-      })
-      mockOctokit.rest.repos.deleteRelease.mockResolvedValue({ data: {} })
-
-      await createOrUpdateRelease(githubContext, 'v2.0.0', '2.0.0', 'Release notes')
-
-      expect(mockOctokit.rest.repos.listReleases).toHaveBeenCalledTimes(2)
-      expect(mockOctokit.rest.repos.updateRelease).toHaveBeenCalledWith(
-        expect.objectContaining({
-          owner: 'test-owner',
-          repo: 'test-repo',
-          release_id: 10
-        })
-      )
-      expect(mockOctokit.rest.repos.updateRelease).not.toHaveBeenCalledWith(
-        expect.objectContaining({
-          release_id: 110
-        })
-      )
-      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        release_id: 111
-      })
-    })
-
-    it('should stop pagination after scanning one full page beyond the found draft', async () => {
-      const pageOneReleases = [
-        {
-          id: 1,
-          tag_name: 'v2.0.0',
-          draft: true,
-          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v2.0.0',
-          body: `Existing release notes\n${SAVR_MARKER}`
-        },
-        ...Array.from({ length: 99 }, (_, index) => {
-          const releaseNumber = String(index + 1)
-          return {
-            id: index + 2,
-            tag_name: `v0.${releaseNumber}.0`,
-            draft: false,
-            html_url: `https://github.com/test-owner/test-repo/releases/tag/v0.${releaseNumber}.0`
-          }
-        })
-      ]
-
-      const pageTwoReleases = Array.from({ length: 100 }, (_, index) => {
-        const releaseNumber = String(index + 101)
-        return {
-          id: index + 101,
-          tag_name: `v0.${releaseNumber}.0`,
-          draft: false,
-          html_url: `https://github.com/test-owner/test-repo/releases/tag/v0.${releaseNumber}.0`
-        }
-      })
-
-      mockOctokit.rest.repos.listReleases.mockResolvedValueOnce({ data: pageOneReleases }).mockResolvedValueOnce({
-        data: pageTwoReleases
-      })
-      mockOctokit.rest.repos.updateRelease.mockResolvedValue({
-        data: {
-          id: 1,
-          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v2.0.0',
-          tag_name: 'v2.0.0'
-        }
-      })
-
-      await createOrUpdateRelease(githubContext, 'v2.0.0', '2.0.0', 'Release notes')
-
-      expect(mockOctokit.rest.repos.listReleases).toHaveBeenCalledTimes(2)
-      expect(mockOctokit.rest.repos.listReleases).toHaveBeenNthCalledWith(1, {
-        owner: 'test-owner',
-        repo: 'test-repo',
-        per_page: 100,
-        page: 1
-      })
-      expect(mockOctokit.rest.repos.listReleases).toHaveBeenNthCalledWith(2, {
-        owner: 'test-owner',
-        repo: 'test-repo',
-        per_page: 100,
-        page: 2
-      })
-      expect(mockOctokit.rest.repos.updateRelease).toHaveBeenCalledWith(
-        expect.objectContaining({
-          owner: 'test-owner',
-          repo: 'test-repo',
-          release_id: 1
-        })
-      )
-      expect(mockOctokit.rest.repos.deleteRelease).not.toHaveBeenCalled()
-    })
-
-    it('should not delete non-SAVR draft releases during cleanup', async () => {
-      mockOctokit.rest.repos.listReleases.mockResolvedValue({
-        data: [
-          {
-            id: 1,
-            tag_name: 'v1.0.1',
-            draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.1',
-            body: 'Manually created draft release'
-          },
-          {
-            id: 2,
-            tag_name: 'v0.9.0',
-            draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v0.9.0',
-            body: `Release notes\n${SAVR_MARKER}`
-          }
-        ]
-      })
-      mockOctokit.rest.repos.createRelease.mockResolvedValue({
-        data: {
-          id: 3,
-          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.1.0',
-          tag_name: 'v1.1.0'
-        }
-      })
-      mockOctokit.rest.repos.deleteRelease.mockResolvedValue({ data: {} })
-
-      await createOrUpdateRelease(githubContext, 'v1.1.0', '1.1.0', 'Release notes')
-
-      // Should only delete the SAVR-managed draft (v0.9.0), not the manually created one (v1.0.1)
-      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledTimes(1)
-      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        release_id: 2
-      })
-    })
-
-    it('should ignore 404 errors when deleting old drafts concurrently', async () => {
-      mockOctokit.rest.repos.listReleases.mockResolvedValue({
-        data: [
-          {
-            id: 1,
-            tag_name: 'v1.0.1',
-            draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.1',
-            body: `Release notes\n${SAVR_MARKER}`
-          }
-        ]
-      })
-      mockOctokit.rest.repos.createRelease.mockResolvedValue({
-        data: {
-          id: 2,
-          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.1.0',
-          tag_name: 'v1.1.0'
-        }
-      })
-      const notFoundError = Object.assign(new Error('Not Found'), { status: 404 })
-      mockOctokit.rest.repos.deleteRelease.mockRejectedValue(notFoundError)
-
-      await expect(createOrUpdateRelease(githubContext, 'v1.1.0', '1.1.0', 'Release notes')).resolves.toEqual({
-        id: 2,
-        url: 'https://github.com/test-owner/test-repo/releases/tag/v1.1.0',
-        tagName: 'v1.1.0'
-      })
-      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        release_id: 1
-      })
-      expect(warning).toHaveBeenCalledWith(
-        'Old draft release v1.0.1 (ID: 1) was already deleted by another workflow run'
-      )
-    })
-
-    it('should warn and continue when old draft cleanup fails with a non-404 error', async () => {
-      mockOctokit.rest.repos.listReleases.mockResolvedValue({
-        data: [
-          {
-            id: 1,
-            tag_name: 'v1.0.1',
-            draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.1',
-            body: `Release notes\n${SAVR_MARKER}`
-          }
-        ]
-      })
-      mockOctokit.rest.repos.createRelease.mockResolvedValue({
-        data: {
-          id: 2,
-          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.1.0',
-          tag_name: 'v1.1.0'
-        }
-      })
-      const rateLimitError = Object.assign(new Error('Secondary rate limit'), { status: 429 })
-      mockOctokit.rest.repos.deleteRelease.mockRejectedValue(rateLimitError)
-
-      await expect(createOrUpdateRelease(githubContext, 'v1.1.0', '1.1.0', 'Release notes')).resolves.toEqual({
-        id: 2,
-        url: 'https://github.com/test-owner/test-repo/releases/tag/v1.1.0',
-        tagName: 'v1.1.0'
-      })
-      expect(warning).toHaveBeenCalledWith(
-        'Failed to delete old draft release v1.0.1 (ID: 1): status 429, Secondary rate limit'
-      )
-    })
-
-    it('should continue deleting remaining old drafts after one cleanup failure', async () => {
-      mockOctokit.rest.repos.listReleases.mockResolvedValue({
-        data: [
-          {
-            id: 1,
-            tag_name: 'v1.0.1',
-            draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.1',
-            body: `Release notes\n${SAVR_MARKER}`
-          },
-          {
-            id: 2,
-            tag_name: 'v1.0.2',
-            draft: true,
-            html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.0.2',
-            body: `Release notes\n${SAVR_MARKER}`
-          }
-        ]
-      })
-      mockOctokit.rest.repos.createRelease.mockResolvedValue({
-        data: {
-          id: 3,
-          html_url: 'https://github.com/test-owner/test-repo/releases/tag/v1.1.0',
-          tag_name: 'v1.1.0'
-        }
-      })
-      const persistentFailure = Object.assign(new Error('Forbidden'), { status: 403 })
-      mockOctokit.rest.repos.deleteRelease.mockRejectedValueOnce(persistentFailure).mockResolvedValueOnce({ data: {} })
-
-      await expect(createOrUpdateRelease(githubContext, 'v1.1.0', '1.1.0', 'Release notes')).resolves.toEqual({
-        id: 3,
-        url: 'https://github.com/test-owner/test-repo/releases/tag/v1.1.0',
-        tagName: 'v1.1.0'
-      })
-      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        release_id: 1
-      })
-      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        release_id: 2
-      })
-      expect(warning).toHaveBeenCalledWith('Failed to delete old draft release v1.0.1 (ID: 1): status 403, Forbidden')
-    })
-  })
-
-  describe('deleteDraftReleases', () => {
-    it('deletes every given draft and keeps going past failures', async () => {
-      const notFoundError = Object.assign(new Error('Not Found'), { status: 404 })
-      const forbiddenError = Object.assign(new Error('Forbidden'), { status: 403 })
-      mockOctokit.rest.repos.deleteRelease
-        .mockRejectedValueOnce(notFoundError)
-        .mockRejectedValueOnce(forbiddenError)
-        .mockResolvedValueOnce({ data: {} })
-
-      await deleteDraftReleases(githubContext, [
-        { id: 1, tagName: 'v0.4.0' },
-        { id: 2, tagName: 'v0.5.0' },
-        { id: 3, tagName: 'v0.6.0' }
-      ])
-
-      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledTimes(3)
-      expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenLastCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        release_id: 3
-      })
-      expect(warning).toHaveBeenCalledWith(
-        'Old draft release v0.4.0 (ID: 1) was already deleted by another workflow run'
-      )
-      expect(warning).toHaveBeenCalledWith('Failed to delete old draft release v0.5.0 (ID: 2): status 403, Forbidden')
-    })
-  })
-
-  describe('listSavrDraftReleases', () => {
-    const release = (id: number, tagName: string, overrides: { draft?: boolean; body?: string | null } = {}) => ({
+  describe('createReleaseStore', () => {
+    const release = (id: number, tagName: string, overrides: Record<string, unknown> = {}) => ({
       id,
       tag_name: tagName,
-      draft: overrides.draft ?? true,
+      draft: true,
       html_url: `https://github.com/test-owner/test-repo/releases/tag/${tagName}`,
-      body: overrides.body === undefined ? `Release notes\n${SAVR_MARKER}` : overrides.body
+      body: `Release notes\n${SAVR_MARKER}`,
+      ...overrides
     })
 
-    it('returns only SAVR-managed draft releases', async () => {
-      mockOctokit.rest.repos.listReleases.mockResolvedValue({
-        data: [
-          release(1, 'v1.1.0'),
-          release(2, 'v1.0.1', { body: 'Manually created draft release' }),
-          release(3, 'v1.0.2', { body: null }),
-          release(4, 'v1.0.0', { draft: false })
-        ]
+    describe('listDrafts', () => {
+      it('returns the drafts from every page, newest first, telling Draft Releases from hand-made drafts by the marker', async () => {
+        const fullPage = Array.from({ length: 100 }, (_, index) =>
+          release(1000 - index, `v0.0.${String(index)}`, { draft: false })
+        )
+        fullPage[0] = release(1000, 'v2.0.0')
+        mockOctokit.rest.repos.listReleases
+          .mockResolvedValueOnce({ data: fullPage })
+          .mockResolvedValueOnce({ data: [release(5, 'v1.0.0', { body: 'Written by hand' }), release(4, 'v0.9.0')] })
+
+        const drafts = await createReleaseStore(githubContext).listDrafts()
+
+        expect(drafts).toEqual([
+          { id: 1000, tagName: 'v2.0.0', savrManaged: true },
+          { id: 5, tagName: 'v1.0.0', savrManaged: false },
+          { id: 4, tagName: 'v0.9.0', savrManaged: true }
+        ])
+        expect(mockOctokit.rest.repos.listReleases).toHaveBeenCalledTimes(2)
       })
 
-      await expect(listSavrDraftReleases(githubContext)).resolves.toEqual([{ id: 1, tagName: 'v1.1.0' }])
+      it('retries a page that fails with a transient 5xx error', async () => {
+        const serviceUnavailable = Object.assign(new Error('Service Unavailable'), {
+          status: 503,
+          response: { headers: { 'retry-after': '0' } }
+        })
+        mockOctokit.rest.repos.listReleases
+          .mockRejectedValueOnce(serviceUnavailable)
+          .mockResolvedValueOnce({ data: [release(4, 'v0.9.0')] })
+
+        const drafts = await createReleaseStore(githubContext).listDrafts()
+
+        expect(drafts).toEqual([{ id: 4, tagName: 'v0.9.0', savrManaged: true }])
+      })
     })
 
-    it('scans every page of releases', async () => {
-      const firstPage = Array.from({ length: 100 }, (_, index) =>
-        release(index + 100, `v0.0.${String(index)}`, { draft: false })
-      )
-      mockOctokit.rest.repos.listReleases
-        .mockResolvedValueOnce({ data: firstPage })
-        .mockResolvedValueOnce({ data: [release(1, 'v0.5.0')] })
+    const content = { tagName: 'v1.1.0', name: '1.1.0', notes: 'Release notes', targetCommitish: 'head-sha' }
+    const params = {
+      owner: 'test-owner',
+      repo: 'test-repo',
+      tag_name: 'v1.1.0',
+      name: '1.1.0',
+      body: `Release notes\n${SAVR_MARKER}`,
+      draft: true,
+      target_commitish: 'head-sha'
+    }
 
-      await expect(listSavrDraftReleases(githubContext)).resolves.toEqual([{ id: 1, tagName: 'v0.5.0' }])
-      expect(mockOctokit.rest.repos.listReleases).toHaveBeenCalledTimes(2)
-      expect(mockOctokit.rest.repos.listReleases).toHaveBeenLastCalledWith({
-        owner: 'test-owner',
-        repo: 'test-repo',
-        per_page: 100,
-        page: 2
+    describe('createDraft', () => {
+      it('creates a draft that carries the SAVR marker', async () => {
+        mockOctokit.rest.repos.createRelease.mockResolvedValue({ data: release(9, 'v1.1.0') })
+
+        const written = await createReleaseStore(githubContext).createDraft(content)
+
+        expect(mockOctokit.rest.repos.createRelease).toHaveBeenCalledWith(params)
+        expect(written).toEqual({
+          id: 9,
+          url: 'https://github.com/test-owner/test-repo/releases/tag/v1.1.0',
+          tagName: 'v1.1.0'
+        })
+      })
+    })
+
+    describe('updateDraft', () => {
+      it('rewrites the draft, adding the SAVR marker', async () => {
+        mockOctokit.rest.repos.updateRelease.mockResolvedValue({ data: release(7, 'v1.1.0') })
+
+        const written = await createReleaseStore(githubContext).updateDraft(7, content)
+
+        expect(mockOctokit.rest.repos.updateRelease).toHaveBeenCalledWith({ ...params, release_id: 7 })
+        expect(written.id).toBe(7)
+      })
+    })
+
+    describe('deleteDraft', () => {
+      it('deletes the release', async () => {
+        mockOctokit.rest.repos.deleteRelease.mockResolvedValue({ data: {} })
+
+        await createReleaseStore(githubContext).deleteDraft(3)
+
+        expect(mockOctokit.rest.repos.deleteRelease).toHaveBeenCalledWith({
+          owner: 'test-owner',
+          repo: 'test-repo',
+          release_id: 3
+        })
+      })
+
+      it('treats a draft another workflow run already deleted as deleted', async () => {
+        mockOctokit.rest.repos.deleteRelease.mockRejectedValue(Object.assign(new Error('Not Found'), { status: 404 }))
+
+        await expect(createReleaseStore(githubContext).deleteDraft(3)).resolves.toBeUndefined()
+      })
+
+      it('passes on any other failure', async () => {
+        mockOctokit.rest.repos.deleteRelease.mockRejectedValue(Object.assign(new Error('Forbidden'), { status: 403 }))
+
+        await expect(createReleaseStore(githubContext).deleteDraft(3)).rejects.toThrow('Forbidden')
       })
     })
   })

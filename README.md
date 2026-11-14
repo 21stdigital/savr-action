@@ -172,8 +172,9 @@ If your threat model does not allow that, pin the commit SHA instead and let Dep
 
 - On every push, SAVR calculates the next semantic version based on commits since the last tag
 - It creates or updates a single draft release with the generated release notes
-- **Important:** When a new draft release is created, SAVR attempts to delete previous SAVR-managed draft releases so only the latest draft is kept. Manually created draft releases are not affected.
-- When there is nothing to release (no new commits since the latest tag, or no bumping commits), SAVR still deletes SAVR-managed drafts whose version is not ahead of the latest tag. A tag you push by hand, e.g. `v1.0.0` on top of a `v0.5.0` draft, therefore doesn't leave an outdated draft behind. That includes the draft for the exact version you tagged: pushing `v1.1.0` by hand deletes the `v1.1.0` draft on the next push. Create the tag by publishing the draft instead, which keeps any notes you edited. In dry-run mode SAVR only logs which drafts it would delete.
+- **Important:** SAVR keeps at most one SAVR-managed draft per `tag-prefix`: the one for the next version. Every other SAVR-managed draft with the same prefix is deleted. Manually created draft releases and drafts with another prefix are not affected, so several SAVR workflows with different prefixes can share a repository.
+- When there is nothing to release (no new commits since the latest tag, or no bumping commits), SAVR deletes the SAVR-managed drafts with its prefix. A tag you push by hand, e.g. `v1.0.0` on top of a `v0.5.0` draft, therefore doesn't leave an outdated draft behind. That includes the draft for the exact version you tagged: pushing `v1.1.0` by hand deletes the `v1.1.0` draft on the next push. Create the tag by publishing the draft instead, which keeps any notes you edited. In dry-run mode SAVR only logs which drafts it would create, update or delete.
+- If you change `tag-prefix`, SAVR no longer touches drafts with the old prefix. Delete them by hand.
 - Cleanup is best-effort: if deleting an older SAVR-managed draft races with another workflow run or GitHub returns a transient error, the current release update still succeeds and the action logs a warning instead of failing.
 
 ## Version Bump Rules
