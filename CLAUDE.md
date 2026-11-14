@@ -41,7 +41,7 @@ SAVR (Semantic Automatic Version Releaser) is a GitHub Action that keeps a live 
 
 ### This repo releases itself
 
-`.github/workflows/release-draft.yml` runs SAVR (`uses: ./`) on every push to `main`, so a change to the action is exercised on this repo's own draft release.
+`.github/workflows/release-draft.yml` runs SAVR (`uses: ./`) on every push to `main`, so a change to the action is exercised on this repo's own draft release. Dependabot auto-merges use `GITHUB_TOKEN` and start no push runs, so the draft catches up at the next human merge; accepted in #333.
 
 ## Bundled `dist/`
 
@@ -50,7 +50,7 @@ SAVR (Semantic Automatic Version Releaser) is a GitHub Action that keeps a live 
 - Normal path: committing anything under `src/**/*.ts`, `pnpm-lock.yaml` or `package.json` triggers a `lint-staged` task that rebuilds and stages `dist/` in the same commit. Why local-first: `docs/adr/0004-build-dist-locally.md`.
 - Safety net for same-repo PRs without hooks (Dependabot): `test.yml` uploads a rebuilt `dist/` and `commit-dist.yml` commits it, then re-dispatches `Test`. It never pushes to forks. The unprivileged/privileged split is a security boundary (`docs/adr/0001-dist-rebuild-split-flow.md`). `commit-dist.yml` runs from the default branch, so edits to it take effect only after merge.
 - Gate: `Test` fails while a PR's `dist/` differs from the build, so nothing merges ahead of its bundle (`docs/adr/0005-gate-merges-on-current-dist.md`). A red `Test` on a Dependabot PR is expected and heals once the safety net pushes; a fork stays red until someone runs `pnpm build`.
-- Backstop: `check-dist.yml` fails when `main`'s `dist/` is stale anyway (ruleset bypass, direct push), on push and on a daily schedule (Dependabot auto-merges start no push runs); its error names the fix.
+- Backstop: `check-dist.yml` fails when `main`'s `dist/` is stale anyway (ruleset bypass, direct push), on push and on a daily schedule; its error names the fix. The schedule stays because the ruleset does not require PRs to be up to date: two Dependabot PRs can each pass the gate yet merge into a stale `dist/`, and their merges start no push runs (#333).
 
 ## GitHub Issues
 
