@@ -1,6 +1,19 @@
-import { describe, expect, it } from 'vitest'
+import { warning } from '@actions/core'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { getLatestVersion, incrementVersion, isSupersededBy, resolveVersionBump } from '../src/version.js'
+import {
+  checkInitialVersion,
+  getLatestVersion,
+  incrementVersion,
+  isInitialDevelopment,
+  isSupersededBy,
+  resolveVersionBump
+} from '../src/version.js'
+
+vi.mock('@actions/core', async importOriginal => ({
+  ...(await importOriginal<typeof import('@actions/core')>()),
+  warning: vi.fn()
+}))
 
 describe('version', () => {
   describe('incrementVersion', () => {
@@ -39,6 +52,35 @@ describe('version', () => {
 
     it('should throw for invalid version string', () => {
       expect(() => incrementVersion('not-a-version', 'patch')).toThrow('Failed to increment version')
+    })
+  })
+
+  describe('isInitialDevelopment', () => {
+    it('is true while the major version is 0', () => {
+      expect(isInitialDevelopment('0.1.0')).toBe(true)
+      expect(isInitialDevelopment('0.99.3')).toBe(true)
+    })
+
+    it('is false from 1.0.0 on', () => {
+      expect(isInitialDevelopment('1.0.0')).toBe(false)
+      expect(isInitialDevelopment('2.3.4')).toBe(false)
+    })
+  })
+
+  describe('checkInitialVersion', () => {
+    beforeEach(() => {
+      vi.mocked(warning).mockClear()
+    })
+
+    it('warns when bump-minor-pre-major is on and initial-version is past Initial Development', () => {
+      checkInitialVersion('1.0.0', { bumpMinorPreMajor: true })
+      expect(warning).toHaveBeenCalledWith(expect.stringContaining('initial-version "1.0.0"'))
+    })
+
+    it('stays silent for a 0.x initial-version or when bump-minor-pre-major is off', () => {
+      checkInitialVersion('0.1.0', { bumpMinorPreMajor: true })
+      checkInitialVersion('1.0.0', { bumpMinorPreMajor: false })
+      expect(warning).not.toHaveBeenCalled()
     })
   })
 

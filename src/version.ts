@@ -22,6 +22,20 @@ export interface VersionBumpOptions {
   bumpMinorPreMajor: boolean
 }
 
+// Initial Development: semver's 0.y.z phase, where the major version is 0.
+export const isInitialDevelopment = (version: string): boolean => major(version) === 0
+
+// With no Version Tags yet, the first Draft Release is initial-version. A non-0.x
+// start leaves Initial Development before it began, so bump-minor-pre-major can
+// never apply; warn instead of silently ignoring the input.
+export const checkInitialVersion = (initialVersion: string, options: VersionBumpOptions): void => {
+  if (options.bumpMinorPreMajor && !isInitialDevelopment(initialVersion)) {
+    warning(
+      `bump-minor-pre-major has no effect: there are no version tags yet and initial-version "${initialVersion}" is not a 0.x version. Set initial-version to a 0.x version such as 0.1.0 to stay in Initial Development.`
+    )
+  }
+}
+
 export const resolveVersionBump = (
   bump: VersionType,
   currentVersion: string,
@@ -31,12 +45,12 @@ export const resolveVersionBump = (
     return bump
   }
 
-  if (major(currentVersion) !== 0) {
-    debug(`bump-minor-pre-major has no effect: ${currentVersion} is past initial development`)
+  if (!isInitialDevelopment(currentVersion)) {
+    debug(`bump-minor-pre-major has no effect: ${currentVersion} is past Initial Development`)
     return bump
   }
 
-  info(`Breaking changes in initial development (${currentVersion}) - minor version bump (bump-minor-pre-major)`)
+  info(`Breaking changes in Initial Development (${currentVersion}) - minor version bump (bump-minor-pre-major)`)
   return 'minor'
 }
 

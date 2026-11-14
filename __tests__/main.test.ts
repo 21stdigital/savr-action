@@ -16,7 +16,13 @@ import {
 import { buildAndPublishRelease, run } from '../src/main.js'
 import { compileReleaseNotes } from '../src/templates.js'
 import type * as VersionModule from '../src/version.js'
-import { getLatestVersion, incrementVersion, isSupersededBy, resolveVersionBump } from '../src/version.js'
+import {
+  checkInitialVersion,
+  getLatestVersion,
+  incrementVersion,
+  isSupersededBy,
+  resolveVersionBump
+} from '../src/version.js'
 
 const mockGithubContext = vi.hoisted(() => ({
   ref: 'refs/heads/main',
@@ -544,6 +550,13 @@ describe('main', () => {
     describe('bump-minor-pre-major', () => {
       const breakingCommit = { type: 'feat', subject: 'drop old API', message: 'feat!: drop old API', breaking: true }
 
+      // version.js is auto-mocked; the warning itself is unit-tested in version.test.ts,
+      // so wire the real check in to prove run() routes the no-tags case through it.
+      const useActualCheckInitialVersion = async () => {
+        const actualVersion = await vi.importActual<typeof VersionModule>('../src/version.js')
+        ;(checkInitialVersion as Mock).mockImplementation(actualVersion.checkInitialVersion)
+      }
+
       const setBumpMinorPreMajor = (enabled: boolean) => {
         ;(getBooleanInput as Mock).mockImplementation((name: string) => name === 'bump-minor-pre-major' && enabled)
       }
@@ -602,6 +615,7 @@ describe('main', () => {
         setBumpMinorPreMajor(true)
         setInputs({ 'initial-version': '1.0.0' })
         setupInitialReleaseFlow()
+        await useActualCheckInitialVersion()
 
         await run()
 
@@ -612,6 +626,7 @@ describe('main', () => {
         setBumpMinorPreMajor(true)
         setInputs({ 'initial-version': '0.1.0' })
         setupInitialReleaseFlow()
+        await useActualCheckInitialVersion()
 
         await run()
 
