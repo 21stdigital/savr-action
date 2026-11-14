@@ -12,6 +12,17 @@ saveExact: true
 allowBuilds:
   esbuild: true
 
+# Fill in dependencies a package uses but does not declare.
+packageExtensions:
+  # eslint-import-context (via eslint-plugin-import-x, #323) imports `type-fest`
+  # in its published .d.ts but lists it only as a devDependency, so `pnpm
+  # typecheck` (which reads eslint.config.js) fails with TS2307. Types only,
+  # nothing reaches dist/. Drop this once upstream declares it; check with
+  # `npm view eslint-import-context dependencies`.
+  eslint-import-context:
+    dependencies:
+      type-fest: '*'
+
 # Dependency overrides pin transitive packages to non-vulnerable versions.
 #
 # A pin earns its place only if it currently changes resolution. Pins that no
