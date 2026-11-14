@@ -42,3 +42,14 @@ overrides:
   'undici': '^7.30.1'
   # Load-bearing (low severity, dev-only).
   'esbuild@<0.28.1': '>=0.28.1'
+  # Load-bearing (moderate, dev-only; minimatch GHSA-g3hv-75wg-m249 #324, glob
+  # GHSA-3g3m-2fjr-6pw4). Both come in through archiver-utils (archiver 7, via
+  # @github/local-action), which asks for glob ^10. Lift glob instead of minimatch:
+  # glob 14 depends on minimatch 11 itself, whereas forcing minimatch 11 under
+  # glob 10 made every glob.sync() return [] without an error. Drop once
+  # @github/local-action moves to archiver 8.
+  'glob@>=9.0.0 <14.0.2': '^14.0.2'
+  # The ESLint tree asks for minimatch 10: @eslint/config-array 0.23.5 (fixed in
+  # 0.23.6) and @typescript-eslint/typescript-estree 8.72.2 (not yet). Safe only
+  # together with the glob pin above; see `pnpm why minimatch` before dropping.
+  'minimatch@>=7.0.0 <11.0.1': '^11.0.1'
