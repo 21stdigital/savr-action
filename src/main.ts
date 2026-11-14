@@ -25,7 +25,6 @@ interface BuildReleaseOptions {
   releaseNotesTemplate: string
   tagPrefix: string
   dryRun: boolean
-  dryRunMessage: string
   targetCommitish: string
 }
 
@@ -54,8 +53,7 @@ export const buildAndPublishRelease = async (
   releaseStore: ReleaseStore,
   options: BuildReleaseOptions
 ): Promise<ReleaseOutputs> => {
-  const { version, tagName, releaseName, categorizedCommits, releaseNotesTemplate, tagPrefix, dryRun, dryRunMessage } =
-    options
+  const { version, tagName, releaseName, categorizedCommits, releaseNotesTemplate, tagPrefix, dryRun } = options
 
   const releaseNotes = compileReleaseNotes(releaseNotesTemplate, {
     version,
@@ -63,8 +61,7 @@ export const buildAndPublishRelease = async (
   })
 
   if (dryRun) {
-    info(dryRunMessage)
-    info(`Version: ${version}`)
+    info(`Dry run - version: ${version}`)
     info('Release notes:')
     // Sanitize release notes to prevent workflow command injection
     info(sanitizeLogOutput(releaseNotes))
@@ -173,7 +170,6 @@ export const run = async (): Promise<void> => {
         releaseNotesTemplate,
         tagPrefix,
         dryRun,
-        dryRunMessage: 'Dry run - would create initial release with:',
         targetCommitish: headRef.object.sha
       })
     )
@@ -241,7 +237,6 @@ export const run = async (): Promise<void> => {
       releaseNotesTemplate,
       tagPrefix,
       dryRun,
-      dryRunMessage: 'Dry run - would create/update release with:',
       targetCommitish: headData.object.sha
     })
   )

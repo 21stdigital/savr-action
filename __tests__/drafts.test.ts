@@ -47,7 +47,7 @@ describe('reconcileDraftReleases', () => {
     })
   })
 
-  it('updates the Draft Release with the same tag name, even one SAVR did not create', async () => {
+  it('adopts a draft release made by hand with the same tag name as its Draft Release', async () => {
     const releases = createInMemoryReleaseStore([{ id: 7, tagName: 'v1.1.0', savrManaged: false, notes: 'Old' }])
 
     const result = await reconcileDraftReleases(releases.store, {
@@ -62,7 +62,7 @@ describe('reconcileDraftReleases', () => {
     expect(result.release?.id).toBe(7)
   })
 
-  it('deletes every other SAVR draft in its Tag Prefix, whether behind or ahead of the new version', async () => {
+  it('deletes every other Draft Release in its Tag Prefix, whether behind or ahead of the new version', async () => {
     const releases = createInMemoryReleaseStore([
       { id: 3, tagName: 'v2.0.0', savrManaged: true },
       { id: 2, tagName: 'v1.0.1', savrManaged: true },
@@ -79,7 +79,7 @@ describe('reconcileDraftReleases', () => {
     expect(result.superseded.map(({ tagName }) => tagName)).toEqual(['v2.0.0', 'v1.0.1', 'v0.9.0'])
   })
 
-  it('leaves drafts with another Tag Prefix, without a version, or not managed by SAVR alone', async () => {
+  it('leaves Draft Releases with another Tag Prefix or without a version, and draft releases made by hand, alone', async () => {
     const releases = createInMemoryReleaseStore([
       { id: 4, tagName: 'api-v0.2.0', savrManaged: true },
       { id: 3, tagName: 'vnext', savrManaged: true },
@@ -97,7 +97,7 @@ describe('reconcileDraftReleases', () => {
     expect(result.superseded).toEqual([])
   })
 
-  it('treats v-prefixed drafts as part of an empty Tag Prefix, like getLatestVersion does', async () => {
+  it('treats v-prefixed Draft Releases as part of an empty Tag Prefix, like getLatestVersion does', async () => {
     // semver accepts a leading `v`, so `tag-prefix: ''` covers `v0.5.0` as well as `0.5.0` (#345).
     const releases = createInMemoryReleaseStore([
       { id: 3, tagName: 'api-v0.2.0', savrManaged: true },
@@ -110,7 +110,7 @@ describe('reconcileDraftReleases', () => {
     expect(releases.tagNames()).toEqual(['1.1.0', 'api-v0.2.0'])
   })
 
-  it('deletes every SAVR draft in its Tag Prefix when there is nothing to release', async () => {
+  it('deletes every Draft Release in its Tag Prefix when there is nothing to release', async () => {
     const releases = createInMemoryReleaseStore([
       { id: 3, tagName: 'v1.1.0', savrManaged: true },
       { id: 2, tagName: 'api-v0.2.0', savrManaged: true },
@@ -124,7 +124,7 @@ describe('reconcileDraftReleases', () => {
     expect(result.superseded.map(({ tagName }) => tagName)).toEqual(['v1.1.0', 'v0.9.0'])
   })
 
-  it('keeps the newest of duplicate drafts for its tag name and deletes the older ones', async () => {
+  it('keeps the newest of duplicate Draft Releases for its tag name and deletes the older ones', async () => {
     // Two concurrent runs can each create a draft for the same tag name.
     const releases = createInMemoryReleaseStore([
       { id: 2, tagName: 'v1.1.0', savrManaged: true },
@@ -136,7 +136,7 @@ describe('reconcileDraftReleases', () => {
     expect(releases.drafts().map(({ id }) => id)).toEqual([2])
   })
 
-  describe('when GitHub fails', () => {
+  describe('when the release store fails', () => {
     it('warns about a draft it cannot delete and still deletes the rest', async () => {
       const releases = createInMemoryReleaseStore([
         { id: 2, tagName: 'v1.0.1', savrManaged: true },
@@ -152,9 +152,7 @@ describe('reconcileDraftReleases', () => {
 
       expect(releases.tagNames()).toEqual(['v1.1.0', 'v1.0.1'])
       expect(result.release?.tagName).toBe('v1.1.0')
-      expect(warning).toHaveBeenCalledWith(
-        'Failed to delete superseded draft release v1.0.1 (ID: 2): status 403, Forbidden'
-      )
+      expect(warning).toHaveBeenCalledWith('Failed to delete Superseded Draft v1.0.1 (ID: 2): Forbidden')
     })
 
     it('fails when it cannot list drafts for a draft it has to write', async () => {
@@ -183,7 +181,7 @@ describe('reconcileDraftReleases', () => {
       const result = await reconcileDraftReleases(releases.store, { tagPrefix: 'v', dryRun: false })
 
       expect(result).toEqual({ superseded: [] })
-      expect(warning).toHaveBeenCalledWith('Failed to list draft releases for cleanup: Bad credentials')
+      expect(warning).toHaveBeenCalledWith('Failed to list Draft Releases for cleanup: Bad credentials')
     })
   })
 
@@ -203,9 +201,9 @@ describe('reconcileDraftReleases', () => {
       expect(releases.tagNames()).toEqual(['v1.0.1', 'v0.9.0'])
       expect(result.release).toBeUndefined()
       expect(result.superseded.map(({ tagName }) => tagName)).toEqual(['v1.0.1', 'v0.9.0'])
-      expect(info).toHaveBeenCalledWith('Dry run - would create draft release v1.1.0')
-      expect(info).toHaveBeenCalledWith('Dry run - would delete superseded draft release v1.0.1 (ID: 2)')
-      expect(info).toHaveBeenCalledWith('Dry run - would delete superseded draft release v0.9.0 (ID: 1)')
+      expect(info).toHaveBeenCalledWith('Dry run - would create Draft Release v1.1.0')
+      expect(info).toHaveBeenCalledWith('Dry run - would delete Superseded Draft v1.0.1 (ID: 2)')
+      expect(info).toHaveBeenCalledWith('Dry run - would delete Superseded Draft v0.9.0 (ID: 1)')
     })
 
     it('reports an update when a draft for the tag name exists', async () => {
@@ -214,7 +212,7 @@ describe('reconcileDraftReleases', () => {
       await reconcileDraftReleases(releases.store, { tagPrefix: 'v', draft: draftFor('v1.1.0'), dryRun: true })
 
       expect(releases.drafts()).toEqual([expect.objectContaining({ id: 5, notes: 'Old' })])
-      expect(info).toHaveBeenCalledWith('Dry run - would update draft release v1.1.0 (ID: 5)')
+      expect(info).toHaveBeenCalledWith('Dry run - would update Draft Release v1.1.0 (ID: 5)')
     })
   })
 })

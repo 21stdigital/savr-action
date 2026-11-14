@@ -136,6 +136,11 @@ describe('version', () => {
       expect(getLatestVersion(tags, 'v')).toEqual({ name: 'v1.1.0', version: '1.1.0' })
     })
 
+    it('keeps the leading v in version for v-prefixed tags with an empty prefix (#345)', () => {
+      // semver accepts a leading `v`, so `tag-prefix: ''` covers `v1.0.0` as well as `1.0.0`.
+      expect(getLatestVersion([{ name: 'v1.0.0', version: '' }], '')).toEqual({ name: 'v1.0.0', version: 'v1.0.0' })
+    })
+
     it('should filter tags by prefix', () => {
       const tags = [
         { name: 'v1.0.0', version: '1.0.0' },

@@ -59899,23 +59899,11 @@ const determineVersionBump = (categorizedCommits) => {
 ;// CONCATENATED MODULE: ./src/drafts.ts
 
 
-const describeError = (err) => {
-    if (!(err instanceof Error)) {
-        return String(err);
-    }
-    const { status, code } = err;
-    return [
-        status != null ? `status ${String(status)}` : undefined,
-        code != null ? `code ${code}` : undefined,
-        err.message
-    ]
-        .filter(part => part != null && part.length > 0)
-        .join(', ');
-};
+const errorMessage = (err) => (err instanceof Error ? err.message : String(err));
 // A draft belongs to this run's Tag Prefix when its tag name is that prefix
 // followed by a semver version. With an empty prefix, semver's tolerance of a
 // leading `v` lets `v1.2.0` match too, as getLatestVersion does.
-const isInTagPrefix = (tagName, tagPrefix) => tagName.startsWith(tagPrefix) && (0,semver.valid)(tagName.slice(tagPrefix.length)) != null;
+const hasTagPrefix = (tagName, tagPrefix) => tagName.startsWith(tagPrefix) && (0,semver.valid)(tagName.slice(tagPrefix.length)) != null;
 const reconcileDraftReleases = async (store, options) => {
     const { draft } = options;
     let drafts;
@@ -59927,19 +59915,19 @@ const reconcileDraftReleases = async (store, options) => {
         if (draft) {
             throw err;
         }
-        warning(`Failed to list draft releases for cleanup: ${describeError(err)}`);
+        warning(`Failed to list Draft Releases for cleanup: ${errorMessage(err)}`);
         return { superseded: [] };
     }
     const current = draft ? drafts.find(({ tagName }) => tagName === draft.tagName) : undefined;
-    const superseded = drafts.filter(candidate => candidate !== current && candidate.savrManaged && isInTagPrefix(candidate.tagName, options.tagPrefix));
+    const superseded = drafts.filter(candidate => candidate !== current && candidate.savrManaged && hasTagPrefix(candidate.tagName, options.tagPrefix));
     if (options.dryRun) {
         if (draft) {
             info(current
-                ? `Dry run - would update draft release ${draft.tagName} (ID: ${String(current.id)})`
-                : `Dry run - would create draft release ${draft.tagName}`);
+                ? `Dry run - would update Draft Release ${draft.tagName} (ID: ${String(current.id)})`
+                : `Dry run - would create Draft Release ${draft.tagName}`);
         }
         for (const { id, tagName } of superseded) {
-            info(`Dry run - would delete superseded draft release ${tagName} (ID: ${String(id)})`);
+            info(`Dry run - would delete Superseded Draft ${tagName} (ID: ${String(id)})`);
         }
         return { superseded };
     }
@@ -59950,12 +59938,12 @@ const reconcileDraftReleases = async (store, options) => {
     // Best-effort: a draft that cannot be deleted is reported and skipped, so
     // cleanup never fails the run.
     for (const { id, tagName } of superseded) {
-        info(`Deleting superseded draft release ${tagName} (ID: ${String(id)})`);
+        info(`Deleting Superseded Draft ${tagName} (ID: ${String(id)})`);
         try {
             await store.deleteDraft(id);
         }
         catch (err) {
-            warning(`Failed to delete superseded draft release ${tagName} (ID: ${String(id)}): ${describeError(err)}`);
+            warning(`Failed to delete Superseded Draft ${tagName} (ID: ${String(id)}): ${errorMessage(err)}`);
         }
     }
     return { release, superseded };
@@ -60159,8 +60147,9 @@ const writtenDraft = (release) => ({
     url: release.html_url,
     tagName: release.tag_name
 });
-// The Octokit adapter at the release store seam. It owns how GitHub marks a
-// SAVR-managed draft, paging, retries and GitHub's status codes.
+// The Octokit adapter at the release store seam. It owns the marker that tells
+// a Draft Release from a draft release made by hand, paging, retries and
+// GitHub's status codes.
 const createReleaseStore = (context) => ({
     listDrafts: async () => {
         const drafts = [];
@@ -60372,14 +60361,13 @@ const processCommits = async (githubContext, head, sinceTag) => {
 // Returns the outputs the caller should publish — shared by the
 // initial-release and Version Bump paths in run().
 const buildAndPublishRelease = async (releaseStore, options) => {
-    const { version, tagName, releaseName, categorizedCommits, releaseNotesTemplate, tagPrefix, dryRun, dryRunMessage } = options;
+    const { version, tagName, releaseName, categorizedCommits, releaseNotesTemplate, tagPrefix, dryRun } = options;
     const releaseNotes = compileReleaseNotes(releaseNotesTemplate, {
         version,
         ...categorizedCommits
     });
     if (dryRun) {
-        info(dryRunMessage);
-        info(`Version: ${version}`);
+        info(`Dry run - version: ${version}`);
         info('Release notes:');
         // Sanitize release notes to prevent workflow command injection
         info(sanitizeLogOutput(releaseNotes));
@@ -60465,7 +60453,6 @@ const run = async () => {
             releaseNotesTemplate,
             tagPrefix,
             dryRun,
-            dryRunMessage: 'Dry run - would create initial release with:',
             targetCommitish: headRef.object.sha
         }));
         return;
@@ -60519,7 +60506,6 @@ const run = async () => {
         releaseNotesTemplate,
         tagPrefix,
         dryRun,
-        dryRunMessage: 'Dry run - would create/update release with:',
         targetCommitish: headData.object.sha
     }));
 };

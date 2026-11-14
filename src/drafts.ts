@@ -44,24 +44,12 @@ export interface ReconcileResult {
   superseded: StoredDraft[]
 }
 
-const describeError = (err: unknown): string => {
-  if (!(err instanceof Error)) {
-    return String(err)
-  }
-  const { status, code } = err as Error & { status?: number; code?: string }
-  return [
-    status != null ? `status ${String(status)}` : undefined,
-    code != null ? `code ${code}` : undefined,
-    err.message
-  ]
-    .filter(part => part != null && part.length > 0)
-    .join(', ')
-}
+const errorMessage = (err: unknown): string => (err instanceof Error ? err.message : String(err))
 
 // A draft belongs to this run's Tag Prefix when its tag name is that prefix
 // followed by a semver version. With an empty prefix, semver's tolerance of a
 // leading `v` lets `v1.2.0` match too, as getLatestVersion does.
-const isInTagPrefix = (tagName: string, tagPrefix: string): boolean =>
+const hasTagPrefix = (tagName: string, tagPrefix: string): boolean =>
   tagName.startsWith(tagPrefix) && valid(tagName.slice(tagPrefix.length)) != null
 
 export const reconcileDraftReleases = async (
@@ -78,24 +66,24 @@ export const reconcileDraftReleases = async (
     if (draft) {
       throw err
     }
-    warning(`Failed to list draft releases for cleanup: ${describeError(err)}`)
+    warning(`Failed to list Draft Releases for cleanup: ${errorMessage(err)}`)
     return { superseded: [] }
   }
   const current = draft ? drafts.find(({ tagName }) => tagName === draft.tagName) : undefined
   const superseded = drafts.filter(
-    candidate => candidate !== current && candidate.savrManaged && isInTagPrefix(candidate.tagName, options.tagPrefix)
+    candidate => candidate !== current && candidate.savrManaged && hasTagPrefix(candidate.tagName, options.tagPrefix)
   )
 
   if (options.dryRun) {
     if (draft) {
       info(
         current
-          ? `Dry run - would update draft release ${draft.tagName} (ID: ${String(current.id)})`
-          : `Dry run - would create draft release ${draft.tagName}`
+          ? `Dry run - would update Draft Release ${draft.tagName} (ID: ${String(current.id)})`
+          : `Dry run - would create Draft Release ${draft.tagName}`
       )
     }
     for (const { id, tagName } of superseded) {
-      info(`Dry run - would delete superseded draft release ${tagName} (ID: ${String(id)})`)
+      info(`Dry run - would delete Superseded Draft ${tagName} (ID: ${String(id)})`)
     }
     return { superseded }
   }
@@ -108,11 +96,11 @@ export const reconcileDraftReleases = async (
   // Best-effort: a draft that cannot be deleted is reported and skipped, so
   // cleanup never fails the run.
   for (const { id, tagName } of superseded) {
-    info(`Deleting superseded draft release ${tagName} (ID: ${String(id)})`)
+    info(`Deleting Superseded Draft ${tagName} (ID: ${String(id)})`)
     try {
       await store.deleteDraft(id)
     } catch (err) {
-      warning(`Failed to delete superseded draft release ${tagName} (ID: ${String(id)}): ${describeError(err)}`)
+      warning(`Failed to delete Superseded Draft ${tagName} (ID: ${String(id)}): ${errorMessage(err)}`)
     }
   }
 

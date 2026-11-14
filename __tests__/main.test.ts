@@ -598,7 +598,6 @@ describe('main', () => {
         releaseNotesTemplate: '',
         tagPrefix: 'v',
         dryRun: false,
-        dryRunMessage: 'Dry run - would create/update release with:',
         targetCommitish: 'head-sha'
       })
 
@@ -624,7 +623,6 @@ describe('main', () => {
         releaseNotesTemplate: '',
         tagPrefix: 'v',
         dryRun: true,
-        dryRunMessage: 'Dry run - would create/update release with:',
         targetCommitish: 'head-sha'
       })
 

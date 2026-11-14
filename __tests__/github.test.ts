@@ -56,7 +56,7 @@ describe('github', () => {
     })
 
     describe('listDrafts', () => {
-      it('returns the drafts from every page, newest first, and recognises SAVR drafts by the marker', async () => {
+      it('returns the drafts from every page, newest first, telling Draft Releases from hand-made drafts by the marker', async () => {
         const fullPage = Array.from({ length: 100 }, (_, index) =>
           release(1000 - index, `v0.0.${String(index)}`, { draft: false })
         )
@@ -73,6 +73,20 @@ describe('github', () => {
           { id: 4, tagName: 'v0.9.0', savrManaged: true }
         ])
         expect(mockOctokit.rest.repos.listReleases).toHaveBeenCalledTimes(2)
+      })
+
+      it('retries a page that fails with a transient 5xx error', async () => {
+        const serviceUnavailable = Object.assign(new Error('Service Unavailable'), {
+          status: 503,
+          response: { headers: { 'retry-after': '0' } }
+        })
+        mockOctokit.rest.repos.listReleases
+          .mockRejectedValueOnce(serviceUnavailable)
+          .mockResolvedValueOnce({ data: [release(4, 'v0.9.0')] })
+
+        const drafts = await createReleaseStore(githubContext).listDrafts()
+
+        expect(drafts).toEqual([{ id: 4, tagName: 'v0.9.0', savrManaged: true }])
       })
     })
 

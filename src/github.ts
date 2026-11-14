@@ -280,8 +280,9 @@ const writtenDraft = (release: { id: number; html_url: string; tag_name: string 
   tagName: release.tag_name
 })
 
-// The Octokit adapter at the release store seam. It owns how GitHub marks a
-// SAVR-managed draft, paging, retries and GitHub's status codes.
+// The Octokit adapter at the release store seam. It owns the marker that tells
+// a Draft Release from a draft release made by hand, paging, retries and
+// GitHub's status codes.
 export const createReleaseStore = (context: GitHubContext): ReleaseStore => ({
   listDrafts: async () => {
     const drafts: StoredDraft[] = []
