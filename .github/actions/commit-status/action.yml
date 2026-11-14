@@ -20,6 +20,9 @@ runs:
   using: composite
   steps:
     - name: Set commit status
+      # The caller's `if` decides whether to report; once called, always post,
+      # including the final status after a failed job.
+      if: always()
       uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       # Inputs go in through env, not interpolated into the script, so no input
       # value can inject code.

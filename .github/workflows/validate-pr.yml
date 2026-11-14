@@ -40,6 +40,7 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        id: checkout
         with:
           ref: ${{ env.HEAD_SHA }}
 
@@ -52,12 +53,22 @@ jobs:
           context: workflows / Validate Pull Request Title
           state: pending
 
-      - name: Set up pnpm
+      - name: Set up pnpm and install dependencies
         uses: ./.github/actions/setup-pnpm
 
       - name: Validate Pull Request Title
         shell: bash
         run: printf '%s\n' "$PR_TITLE" | pnpm commitlint --verbose
+
+      # The final status loads from the checkout. If checkout itself failed, fetch
+      # only .github/actions from this workflow's commit so the status still posts
+      # and the check turns red instead of hanging.
+      - name: Restore status action after a failed checkout
+        if: always() && github.event_name == 'workflow_dispatch' && steps.checkout.outcome == 'failure'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: .github/actions
 
       - name: Set final commit status
         if: always() && github.event_name == 'workflow_dispatch'

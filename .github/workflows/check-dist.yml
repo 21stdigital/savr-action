@@ -34,7 +34,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Set up pnpm
+      - name: Set up pnpm and install dependencies
         uses: ./.github/actions/setup-pnpm
 
       # Build + every CI gate, from the single definition in package.json (#327).
