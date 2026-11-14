@@ -27,6 +27,7 @@ SAVR (Semantic Automatic Version Releaser) is a GitHub Action that keeps a live 
 
 - `commits.ts`: Conventional Commit parsing and the bump each category implies
 - `version.ts`: semver tags, incrementing, `bump-minor-pre-major`
+- `drafts.ts`: Draft Release reconciliation: writes this run's draft and deletes Superseded Drafts, through the `ReleaseStore` seam (Octokit adapter in `github.ts`, in-memory adapter in `__tests__/support/`)
 - `github.ts`: every Octokit call
 - `templates.ts`: Handlebars release notes. The default template exists twice (`action.yml` and `DEFAULT_TEMPLATE`); `templates.test.ts` fails if they drift
 - `utils.ts`: `sanitizeLogOutput()`, which escapes `::` so logged input cannot inject workflow commands
@@ -36,8 +37,8 @@ SAVR (Semantic Automatic Version Releaser) is a GitHub Action that keeps a live 
 - Breaking changes come from `!` after the type or a `BREAKING CHANGE:` footer.
 - No tags yet → the first release is `initial-version` (default 1.0.0).
 - New commits are the ones between HEAD and the latest tag's commit; annotated tags are dereferenced first.
-- No bump (e.g. only `chore`/`docs`), or HEAD is the latest tag's commit → nothing is created or updated, but SAVR-managed drafts at or below the latest tag (same prefix, valid semver) are deleted, e.g. after a tag pushed by hand (#312).
-- Releases are always drafts. The draft for the same tag name is reused; other drafts carrying `SAVR_MARKER` are deleted, and drafts without it are left alone.
+- No bump (e.g. only `chore`/`docs`), or HEAD is the latest tag's commit → nothing is created or updated.
+- Releases are always drafts. The draft for the same tag name is reused, even without `SAVR_MARKER`. Every other draft carrying the marker, with the run's Tag Prefix and a valid semver version, is a Superseded Draft and is deleted, also when there is nothing to release (#312, #357). Drafts without the marker or with another prefix are left alone.
 
 ### This repo releases itself
 

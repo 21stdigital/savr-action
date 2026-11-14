@@ -1,7 +1,8 @@
-import { debug, error, info, warning } from '@actions/core'
+import { debug, info, warning } from '@actions/core'
 import { getOctokit } from '@actions/github'
 
 import { Commit, parseCommit } from './commits.js'
+import type { DraftContent, ReleaseStore, StoredDraft, WrittenDraft } from './drafts.js'
 import { Tag } from './version.js'
 
 export const SAVR_MARKER = '<!-- savr-managed-release -->'
@@ -26,12 +27,6 @@ export interface GitHubContext {
   owner: string
   repo: string
   octokit: ReturnType<typeof getOctokit>
-}
-
-export interface GitHubRelease {
-  id: number
-  url: string
-  tagName: string
 }
 
 type RetryableGitHubError = Error & {
@@ -252,24 +247,6 @@ export const getCommits = async (context: GitHubContext, head: string, sinceTag?
   return commits
 }
 
-export const deleteRelease = async (context: GitHubContext, releaseId: number): Promise<void> => {
-  debug(`Deleting release with ID ${String(releaseId)}`)
-
-  await withGitHubApiRetry('repos.deleteRelease', () =>
-    context.octokit.rest.repos.deleteRelease({
-      owner: context.owner,
-      repo: context.repo,
-      release_id: releaseId
-    })
-  )
-  info(`Release with ID ${String(releaseId)} deleted successfully`)
-}
-
-export interface SavrDraftRelease {
-  id: number
-  tagName: string
-}
-
 const RELEASES_PER_PAGE = 100
 
 const listReleasesPage = async (context: GitHubContext, page: number) => {
@@ -287,189 +264,62 @@ const listReleasesPage = async (context: GitHubContext, page: number) => {
 
 const isSavrManaged = (release: { body?: string | null }): boolean => release.body?.includes(SAVR_MARKER) ?? false
 
-// Scans every page, unlike the create/update path, because no current draft
-// anchors an early stop: a stale draft can sit anywhere in the list.
-export const listSavrDraftReleases = async (context: GitHubContext): Promise<SavrDraftRelease[]> => {
-  const drafts: SavrDraftRelease[] = []
-  let page = 1
-  let hasMore = true
+const draftParams = (context: GitHubContext, content: DraftContent) => ({
+  owner: context.owner,
+  repo: context.repo,
+  tag_name: content.tagName,
+  name: content.name,
+  body: `${content.notes}\n${SAVR_MARKER}`,
+  draft: true,
+  target_commitish: content.targetCommitish
+})
 
-  while (hasMore) {
-    const pageReleases = await listReleasesPage(context, page)
+const writtenDraft = (release: { id: number; html_url: string; tag_name: string }): WrittenDraft => ({
+  id: release.id,
+  url: release.html_url,
+  tagName: release.tag_name
+})
 
-    for (const release of pageReleases) {
-      if (release.draft && isSavrManaged(release)) {
-        drafts.push({ id: release.id, tagName: release.tag_name })
+// The Octokit adapter at the release store seam. It owns how GitHub marks a
+// SAVR-managed draft, paging, retries and GitHub's status codes.
+export const createReleaseStore = (context: GitHubContext): ReleaseStore => ({
+  listDrafts: async () => {
+    const drafts: StoredDraft[] = []
+    for (let page = 1; ; page++) {
+      const pageReleases = await listReleasesPage(context, page)
+      for (const release of pageReleases) {
+        if (release.draft) {
+          drafts.push({ id: release.id, tagName: release.tag_name, savrManaged: isSavrManaged(release) })
+        }
+      }
+      if (pageReleases.length < RELEASES_PER_PAGE) {
+        return drafts
       }
     }
-
-    hasMore = pageReleases.length === RELEASES_PER_PAGE
-    if (hasMore) {
-      page++
-    }
-  }
-
-  return drafts
-}
-
-const listDraftReleasesForCreateOrUpdate = async (
-  context: GitHubContext,
-  tagName: string
-): Promise<{ existingDraft?: SavrDraftRelease; staleDrafts: SavrDraftRelease[] }> => {
-  let existingDraft: SavrDraftRelease | undefined
-  const staleDrafts: SavrDraftRelease[] = []
-  let page = 1
-  let hasMore = true
-  let foundExistingDraftOnPreviousPage = false
-
-  while (hasMore) {
-    const pageReleases = await listReleasesPage(context, page)
-
-    for (const release of pageReleases) {
-      if (!release.draft) {
-        continue
-      }
-
-      const draftRelease: SavrDraftRelease = { id: release.id, tagName: release.tag_name }
-
-      if (release.tag_name === tagName) {
-        // Keep the first match because GitHub returns releases newest-first.
-        // This preserves pre-refactor behavior (`Array.find`) when duplicate
-        // draft tags exist due to race conditions.
-        existingDraft ??= draftRelease
-        continue
-      }
-
-      if (isSavrManaged(release)) {
-        staleDrafts.push(draftRelease)
-      }
-    }
-
-    const isFullPage = pageReleases.length === RELEASES_PER_PAGE
-
-    // Safe early-stop heuristic:
-    // GitHub release pages are ordered newest-first. Once we have found the
-    // current tag's draft, scanning one additional full page captures nearby
-    // stale SAVR drafts while avoiding deep pagination through old published
-    // releases in large repositories. Older stale drafts are cleanup-only and
-    // can be handled by subsequent runs.
-    if (foundExistingDraftOnPreviousPage && isFullPage) {
-      break
-    }
-
-    if (existingDraft) {
-      foundExistingDraftOnPreviousPage = true
-    }
-
-    hasMore = isFullPage
-    if (hasMore) {
-      page++
-    }
-  }
-
-  return {
-    existingDraft,
-    staleDrafts
-  }
-}
-
-// Best-effort: a draft that cannot be deleted is reported and skipped, so
-// cleanup never fails the run.
-export const deleteDraftReleases = async (context: GitHubContext, drafts: SavrDraftRelease[]): Promise<void> => {
-  if (drafts.length === 0) {
-    return
-  }
-
-  info(`Found ${String(drafts.length)} old draft release(s) to delete`)
-  for (const oldDraft of drafts) {
-    info(`Deleting old draft release: ${oldDraft.tagName} (ID: ${String(oldDraft.id)})`)
-
-    try {
-      await deleteRelease(context, oldDraft.id)
-    } catch (deletionError) {
-      const deletionStatus = (deletionError as { status?: number }).status
-
-      if (deletionStatus === 404) {
-        warning(
-          `Old draft release ${oldDraft.tagName} (ID: ${String(oldDraft.id)}) was already deleted by another workflow run`
-        )
-        continue
-      }
-
-      let deletionDetails: string
-      if (deletionError instanceof Error) {
-        const cleanupError = deletionError as RetryableGitHubError
-        deletionDetails = [
-          cleanupError.status != null ? `status ${String(cleanupError.status)}` : undefined,
-          cleanupError.code != null ? `code ${cleanupError.code}` : undefined,
-          deletionError.message
-        ]
-          .filter(part => part != null && part.length > 0)
-          .join(', ')
-      } else {
-        deletionDetails = String(deletionError)
-      }
-
-      warning(`Failed to delete old draft release ${oldDraft.tagName} (ID: ${String(oldDraft.id)}): ${deletionDetails}`)
-    }
-  }
-}
-
-export const createOrUpdateRelease = async (
-  context: GitHubContext,
-  tagName: string,
-  releaseName: string,
-  releaseNotes: string,
-  targetCommitish?: string,
-  draft = true
-): Promise<GitHubRelease> => {
-  debug(`Checking for existing draft release with tag ${tagName}`)
-
-  try {
-    const { existingDraft, staleDrafts } = await listDraftReleasesForCreateOrUpdate(context, tagName)
-
-    const releaseParams = {
-      owner: context.owner,
-      repo: context.repo,
-      tag_name: tagName,
-      name: releaseName,
-      body: `${releaseNotes}\n${SAVR_MARKER}`,
-      draft,
-      ...(targetCommitish ? { target_commitish: targetCommitish } : {})
-    }
-
-    let release
-    if (existingDraft) {
-      info(`Updating existing draft release with ID ${String(existingDraft.id)}`)
-      const { data } = await withGitHubApiRetry('repos.updateRelease', () =>
-        context.octokit.rest.repos.updateRelease({
-          ...releaseParams,
-          release_id: existingDraft.id
-        })
-      )
-      release = data
-    } else {
-      info('Creating new draft release')
-      const { data } = await withGitHubApiRetry('repos.createRelease', () =>
-        context.octokit.rest.repos.createRelease(releaseParams)
-      )
-      release = data
-    }
-
-    // Clean up other draft releases (keep only the current one)
-    await deleteDraftReleases(
-      context,
-      staleDrafts.filter(({ id }) => id !== release.id)
+  },
+  createDraft: async content => {
+    const { data } = await withGitHubApiRetry('repos.createRelease', () =>
+      context.octokit.rest.repos.createRelease(draftParams(context, content))
     )
-
-    info(`Release ${release.tag_name} created/updated successfully`)
-    return {
-      id: release.id,
-      url: release.html_url,
-      tagName: release.tag_name
+    return writtenDraft(data)
+  },
+  updateDraft: async (id, content) => {
+    const { data } = await withGitHubApiRetry('repos.updateRelease', () =>
+      context.octokit.rest.repos.updateRelease({ ...draftParams(context, content), release_id: id })
+    )
+    return writtenDraft(data)
+  },
+  deleteDraft: async id => {
+    try {
+      await withGitHubApiRetry('repos.deleteRelease', () =>
+        context.octokit.rest.repos.deleteRelease({ owner: context.owner, repo: context.repo, release_id: id })
+      )
+    } catch (err) {
+      // Another workflow run got there first.
+      if ((err as { status?: number }).status !== 404) {
+        throw err
+      }
+      debug(`Draft release ${String(id)} was already deleted`)
     }
-  } catch (err) {
-    error(`Failed to create/update release: ${err instanceof Error ? err.message : String(err)}`)
-    throw err
   }
-}
+})

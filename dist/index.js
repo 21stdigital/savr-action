@@ -13067,7 +13067,7 @@ const { MockCallHistory, MockCallHistoryLog } = __nccwpck_require__(6198)
 const MockAgent = __nccwpck_require__(1630)
 const MockPool = __nccwpck_require__(973)
 const SnapshotAgent = __nccwpck_require__(9584)
-const mockErrors = __nccwpck_require__(5056)
+const mockErrors = __nccwpck_require__(2675)
 const RetryHandler = __nccwpck_require__(3359)
 const { getGlobalDispatcher, setGlobalDispatcher } = __nccwpck_require__(824)
 const DecoratorHandler = __nccwpck_require__(9092)
@@ -31223,7 +31223,7 @@ module.exports = MockClient
 
 /***/ }),
 
-/***/ 5056:
+/***/ 2675:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
 
@@ -31594,7 +31594,7 @@ module.exports = {
 
 
 
-const { MockNotMatchedError } = __nccwpck_require__(5056)
+const { MockNotMatchedError } = __nccwpck_require__(2675)
 const {
   kDispatches,
   kMockAgent,
@@ -59896,6 +59896,71 @@ const determineVersionBump = (categorizedCommits) => {
     return versionBump;
 };
 
+;// CONCATENATED MODULE: ./src/drafts.ts
+
+
+const describeError = (err) => {
+    if (!(err instanceof Error)) {
+        return String(err);
+    }
+    const { status, code } = err;
+    return [
+        status != null ? `status ${String(status)}` : undefined,
+        code != null ? `code ${code}` : undefined,
+        err.message
+    ]
+        .filter(part => part != null && part.length > 0)
+        .join(', ');
+};
+// A draft belongs to this run's Tag Prefix when its tag name is that prefix
+// followed by a semver version. With an empty prefix, semver's tolerance of a
+// leading `v` lets `v1.2.0` match too, as getLatestVersion does.
+const isInTagPrefix = (tagName, tagPrefix) => tagName.startsWith(tagPrefix) && (0,semver.valid)(tagName.slice(tagPrefix.length)) != null;
+const reconcileDraftReleases = async (store, options) => {
+    const { draft } = options;
+    let drafts;
+    try {
+        drafts = await store.listDrafts();
+    }
+    catch (err) {
+        // Writing the draft is the run's job; cleanup alone is not worth failing it.
+        if (draft) {
+            throw err;
+        }
+        warning(`Failed to list draft releases for cleanup: ${describeError(err)}`);
+        return { superseded: [] };
+    }
+    const current = draft ? drafts.find(({ tagName }) => tagName === draft.tagName) : undefined;
+    const superseded = drafts.filter(candidate => candidate !== current && candidate.savrManaged && isInTagPrefix(candidate.tagName, options.tagPrefix));
+    if (options.dryRun) {
+        if (draft) {
+            info(current
+                ? `Dry run - would update draft release ${draft.tagName} (ID: ${String(current.id)})`
+                : `Dry run - would create draft release ${draft.tagName}`);
+        }
+        for (const { id, tagName } of superseded) {
+            info(`Dry run - would delete superseded draft release ${tagName} (ID: ${String(id)})`);
+        }
+        return { superseded };
+    }
+    let release;
+    if (draft) {
+        release = current ? await store.updateDraft(current.id, draft) : await store.createDraft(draft);
+    }
+    // Best-effort: a draft that cannot be deleted is reported and skipped, so
+    // cleanup never fails the run.
+    for (const { id, tagName } of superseded) {
+        info(`Deleting superseded draft release ${tagName} (ID: ${String(id)})`);
+        try {
+            await store.deleteDraft(id);
+        }
+        catch (err) {
+            warning(`Failed to delete superseded draft release ${tagName} (ID: ${String(id)}): ${describeError(err)}`);
+        }
+    }
+    return { release, superseded };
+};
+
 ;// CONCATENATED MODULE: ./src/github.ts
 
 
@@ -60068,15 +60133,6 @@ const getCommits = async (context, head, sinceTag) => {
     info(`Total commits retrieved: ${String(commits.length)}`);
     return commits;
 };
-const deleteRelease = async (context, releaseId) => {
-    core_debug(`Deleting release with ID ${String(releaseId)}`);
-    await withGitHubApiRetry('repos.deleteRelease', () => context.octokit.rest.repos.deleteRelease({
-        owner: context.owner,
-        repo: context.repo,
-        release_id: releaseId
-    }));
-    info(`Release with ID ${String(releaseId)} deleted successfully`);
-};
 const RELEASES_PER_PAGE = 100;
 const listReleasesPage = async (context, page) => {
     core_debug(`Fetching releases page ${String(page)}`);
@@ -60089,150 +60145,58 @@ const listReleasesPage = async (context, page) => {
     return data;
 };
 const isSavrManaged = (release) => release.body?.includes(SAVR_MARKER) ?? false;
-// Scans every page, unlike the create/update path, because no current draft
-// anchors an early stop: a stale draft can sit anywhere in the list.
-const listSavrDraftReleases = async (context) => {
-    const drafts = [];
-    let page = 1;
-    let hasMore = true;
-    while (hasMore) {
-        const pageReleases = await listReleasesPage(context, page);
-        for (const release of pageReleases) {
-            if (release.draft && isSavrManaged(release)) {
-                drafts.push({ id: release.id, tagName: release.tag_name });
+const draftParams = (context, content) => ({
+    owner: context.owner,
+    repo: context.repo,
+    tag_name: content.tagName,
+    name: content.name,
+    body: `${content.notes}\n${SAVR_MARKER}`,
+    draft: true,
+    target_commitish: content.targetCommitish
+});
+const writtenDraft = (release) => ({
+    id: release.id,
+    url: release.html_url,
+    tagName: release.tag_name
+});
+// The Octokit adapter at the release store seam. It owns how GitHub marks a
+// SAVR-managed draft, paging, retries and GitHub's status codes.
+const createReleaseStore = (context) => ({
+    listDrafts: async () => {
+        const drafts = [];
+        for (let page = 1;; page++) {
+            const pageReleases = await listReleasesPage(context, page);
+            for (const release of pageReleases) {
+                if (release.draft) {
+                    drafts.push({ id: release.id, tagName: release.tag_name, savrManaged: isSavrManaged(release) });
+                }
+            }
+            if (pageReleases.length < RELEASES_PER_PAGE) {
+                return drafts;
             }
         }
-        hasMore = pageReleases.length === RELEASES_PER_PAGE;
-        if (hasMore) {
-            page++;
-        }
-    }
-    return drafts;
-};
-const listDraftReleasesForCreateOrUpdate = async (context, tagName) => {
-    let existingDraft;
-    const staleDrafts = [];
-    let page = 1;
-    let hasMore = true;
-    let foundExistingDraftOnPreviousPage = false;
-    while (hasMore) {
-        const pageReleases = await listReleasesPage(context, page);
-        for (const release of pageReleases) {
-            if (!release.draft) {
-                continue;
-            }
-            const draftRelease = { id: release.id, tagName: release.tag_name };
-            if (release.tag_name === tagName) {
-                // Keep the first match because GitHub returns releases newest-first.
-                // This preserves pre-refactor behavior (`Array.find`) when duplicate
-                // draft tags exist due to race conditions.
-                existingDraft ??= draftRelease;
-                continue;
-            }
-            if (isSavrManaged(release)) {
-                staleDrafts.push(draftRelease);
-            }
-        }
-        const isFullPage = pageReleases.length === RELEASES_PER_PAGE;
-        // Safe early-stop heuristic:
-        // GitHub release pages are ordered newest-first. Once we have found the
-        // current tag's draft, scanning one additional full page captures nearby
-        // stale SAVR drafts while avoiding deep pagination through old published
-        // releases in large repositories. Older stale drafts are cleanup-only and
-        // can be handled by subsequent runs.
-        if (foundExistingDraftOnPreviousPage && isFullPage) {
-            break;
-        }
-        if (existingDraft) {
-            foundExistingDraftOnPreviousPage = true;
-        }
-        hasMore = isFullPage;
-        if (hasMore) {
-            page++;
-        }
-    }
-    return {
-        existingDraft,
-        staleDrafts
-    };
-};
-// Best-effort: a draft that cannot be deleted is reported and skipped, so
-// cleanup never fails the run.
-const deleteDraftReleases = async (context, drafts) => {
-    if (drafts.length === 0) {
-        return;
-    }
-    info(`Found ${String(drafts.length)} old draft release(s) to delete`);
-    for (const oldDraft of drafts) {
-        info(`Deleting old draft release: ${oldDraft.tagName} (ID: ${String(oldDraft.id)})`);
+    },
+    createDraft: async (content) => {
+        const { data } = await withGitHubApiRetry('repos.createRelease', () => context.octokit.rest.repos.createRelease(draftParams(context, content)));
+        return writtenDraft(data);
+    },
+    updateDraft: async (id, content) => {
+        const { data } = await withGitHubApiRetry('repos.updateRelease', () => context.octokit.rest.repos.updateRelease({ ...draftParams(context, content), release_id: id }));
+        return writtenDraft(data);
+    },
+    deleteDraft: async (id) => {
         try {
-            await deleteRelease(context, oldDraft.id);
+            await withGitHubApiRetry('repos.deleteRelease', () => context.octokit.rest.repos.deleteRelease({ owner: context.owner, repo: context.repo, release_id: id }));
         }
-        catch (deletionError) {
-            const deletionStatus = deletionError.status;
-            if (deletionStatus === 404) {
-                warning(`Old draft release ${oldDraft.tagName} (ID: ${String(oldDraft.id)}) was already deleted by another workflow run`);
-                continue;
+        catch (err) {
+            // Another workflow run got there first.
+            if (err.status !== 404) {
+                throw err;
             }
-            let deletionDetails;
-            if (deletionError instanceof Error) {
-                const cleanupError = deletionError;
-                deletionDetails = [
-                    cleanupError.status != null ? `status ${String(cleanupError.status)}` : undefined,
-                    cleanupError.code != null ? `code ${cleanupError.code}` : undefined,
-                    deletionError.message
-                ]
-                    .filter(part => part != null && part.length > 0)
-                    .join(', ');
-            }
-            else {
-                deletionDetails = String(deletionError);
-            }
-            warning(`Failed to delete old draft release ${oldDraft.tagName} (ID: ${String(oldDraft.id)}): ${deletionDetails}`);
+            core_debug(`Draft release ${String(id)} was already deleted`);
         }
     }
-};
-const createOrUpdateRelease = async (context, tagName, releaseName, releaseNotes, targetCommitish, draft = true) => {
-    core_debug(`Checking for existing draft release with tag ${tagName}`);
-    try {
-        const { existingDraft, staleDrafts } = await listDraftReleasesForCreateOrUpdate(context, tagName);
-        const releaseParams = {
-            owner: context.owner,
-            repo: context.repo,
-            tag_name: tagName,
-            name: releaseName,
-            body: `${releaseNotes}\n${SAVR_MARKER}`,
-            draft,
-            ...(targetCommitish ? { target_commitish: targetCommitish } : {})
-        };
-        let release;
-        if (existingDraft) {
-            info(`Updating existing draft release with ID ${String(existingDraft.id)}`);
-            const { data } = await withGitHubApiRetry('repos.updateRelease', () => context.octokit.rest.repos.updateRelease({
-                ...releaseParams,
-                release_id: existingDraft.id
-            }));
-            release = data;
-        }
-        else {
-            info('Creating new draft release');
-            const { data } = await withGitHubApiRetry('repos.createRelease', () => context.octokit.rest.repos.createRelease(releaseParams));
-            release = data;
-        }
-        // Clean up other draft releases (keep only the current one)
-        await deleteDraftReleases(context, staleDrafts.filter(({ id }) => id !== release.id));
-        info(`Release ${release.tag_name} created/updated successfully`);
-        return {
-            id: release.id,
-            url: release.html_url,
-            tagName: release.tag_name
-        };
-    }
-    catch (err) {
-        error(`Failed to create/update release: ${err instanceof Error ? err.message : String(err)}`);
-        throw err;
-    }
-};
+});
 
 // EXTERNAL MODULE: ./node_modules/.pnpm/handlebars@4.7.10/node_modules/handlebars/lib/index.js
 var handlebars_lib = __nccwpck_require__(7979);
@@ -60380,19 +60344,9 @@ const getLatestVersion = (tags, tagPrefix) => {
     warning('No valid version tags found');
     return undefined;
 };
-// A Draft Release is superseded once a Version Tag at or beyond its version
-// exists: publishing it could no longer produce the next version. Tags with
-// another prefix or without a semver version are never superseded, so drafts
-// SAVR cannot reason about are left alone.
-const isSupersededBy = (draftTagName, latestTag, tagPrefix) => {
-    if (!draftTagName.startsWith(tagPrefix)) {
-        return false;
-    }
-    const draftVersion = draftTagName.slice(tagPrefix.length);
-    return (0,semver.valid)(draftVersion) != null && (0,semver.lte)(draftVersion, latestTag.version);
-};
 
 ;// CONCATENATED MODULE: ./src/main.ts
+
 
 
 
@@ -60413,11 +60367,12 @@ const processCommits = async (githubContext, head, sinceTag) => {
     const categorizedCommits = categorizeCommits(commits);
     return { commits, categorizedCommits };
 };
-// Compiles release notes and either logs a dry-run preview or creates/updates
-// the draft release. Returns the outputs the caller should publish — shared by
-// the initial-release and version-bump paths in run().
-const buildAndPublishRelease = async (githubContext, options) => {
-    const { version, tagName, releaseName, categorizedCommits, releaseNotesTemplate, dryRun, dryRunMessage } = options;
+// Compiles release notes and hands the Draft Release to reconciliation, which
+// writes it (or only reports it in a dry run) and removes Superseded Drafts.
+// Returns the outputs the caller should publish — shared by the
+// initial-release and Version Bump paths in run().
+const buildAndPublishRelease = async (releaseStore, options) => {
+    const { version, tagName, releaseName, categorizedCommits, releaseNotesTemplate, tagPrefix, dryRun, dryRunMessage } = options;
     const releaseNotes = compileReleaseNotes(releaseNotesTemplate, {
         version,
         ...categorizedCommits
@@ -60428,13 +60383,19 @@ const buildAndPublishRelease = async (githubContext, options) => {
         info('Release notes:');
         // Sanitize release notes to prevent workflow command injection
         info(sanitizeLogOutput(releaseNotes));
+    }
+    const { release } = await reconcileDraftReleases(releaseStore, {
+        tagPrefix,
+        draft: { tagName, name: releaseName, notes: releaseNotes, targetCommitish: options.targetCommitish },
+        dryRun
+    });
+    if (!release) {
         return {
             skipped: true,
             version,
             tag: tagName
         };
     }
-    const release = await createOrUpdateRelease(githubContext, tagName, releaseName, releaseNotes, options.targetCommitish);
     return {
         skipped: false,
         releaseUrl: release.url,
@@ -60442,29 +60403,6 @@ const buildAndPublishRelease = async (githubContext, options) => {
         version,
         tag: release.tagName
     };
-};
-// When no Version Bump is needed, SAVR-managed drafts at or below the latest
-// Version Tag (e.g. a v0.5.0 draft after v1.0.0 was tagged by hand) would
-// otherwise linger and could be published by mistake. Best-effort: failures
-// warn instead of failing a run that has nothing to release anyway.
-const deleteSupersededDrafts = async (githubContext, latestTag, tagPrefix, dryRun) => {
-    try {
-        const drafts = await listSavrDraftReleases(githubContext);
-        const superseded = drafts.filter(draft => isSupersededBy(draft.tagName, latestTag, tagPrefix));
-        if (superseded.length === 0) {
-            return;
-        }
-        if (dryRun) {
-            superseded.forEach(draft => {
-                info(`Dry run - would delete superseded draft release ${draft.tagName} (ID: ${String(draft.id)})`);
-            });
-            return;
-        }
-        await deleteDraftReleases(githubContext, superseded);
-    }
-    catch (err) {
-        warning(`Failed to clean up superseded draft releases: ${err instanceof Error ? err.message : String(err)}`);
-    }
 };
 const run = async () => {
     const token = getInput('github-token', { required: true });
@@ -60504,6 +60442,7 @@ const run = async () => {
     }
     setOutput('dry-run', dryRun.toString());
     const githubContext = { owner, repo, octokit };
+    const releaseStore = createReleaseStore(githubContext);
     const setReleaseOutputs = (outputs) => {
         setOutput('skipped', outputs.skipped.toString());
         setOutput('release-url', outputs.releaseUrl ?? '');
@@ -60518,12 +60457,13 @@ const run = async () => {
         checkInitialVersion(initialVersion, { bumpMinorPreMajor });
         const headRef = await getGitRef(githubContext, `heads/${releaseBranch}`);
         const { categorizedCommits } = await processCommits(githubContext, headRef.object.sha);
-        setReleaseOutputs(await buildAndPublishRelease(githubContext, {
+        setReleaseOutputs(await buildAndPublishRelease(releaseStore, {
             version: initialVersion,
             tagName: `${tagPrefix}${initialVersion}`,
             releaseName: initialVersion,
             categorizedCommits,
             releaseNotesTemplate,
+            tagPrefix,
             dryRun,
             dryRunMessage: 'Dry run - would create initial release with:',
             targetCommitish: headRef.object.sha
@@ -60549,7 +60489,7 @@ const run = async () => {
     // If HEAD and tag point to the same commit, there are no new commits to process
     if (headData.object.sha === latestTagCommitSha) {
         info('HEAD and latest tag point to the same commit - no changes to release');
-        await deleteSupersededDrafts(githubContext, latestTag, tagPrefix, dryRun);
+        await reconcileDraftReleases(releaseStore, { tagPrefix, dryRun });
         setReleaseOutputs({
             skipped: true,
             version: latestTag.version,
@@ -60562,7 +60502,7 @@ const run = async () => {
     const versionBump = determineVersionBump(categorizedCommits);
     if (versionBump == null) {
         info('No version bump needed - skipping release creation');
-        await deleteSupersededDrafts(githubContext, latestTag, tagPrefix, dryRun);
+        await reconcileDraftReleases(releaseStore, { tagPrefix, dryRun });
         setReleaseOutputs({
             skipped: true,
             version: latestTag.version,
@@ -60571,12 +60511,13 @@ const run = async () => {
         return;
     }
     newVersion = incrementVersion(newVersion, resolveVersionBump(versionBump, newVersion, { bumpMinorPreMajor }));
-    setReleaseOutputs(await buildAndPublishRelease(githubContext, {
+    setReleaseOutputs(await buildAndPublishRelease(releaseStore, {
         version: newVersion,
         tagName: `${tagPrefix}${newVersion}`,
         releaseName: newVersion,
         categorizedCommits,
         releaseNotesTemplate,
+        tagPrefix,
         dryRun,
         dryRunMessage: 'Dry run - would create/update release with:',
         targetCommitish: headData.object.sha

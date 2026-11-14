@@ -1,28 +1,15 @@
-import { getBooleanInput, getInput, info, setOutput, warning } from '@actions/core'
+import { getBooleanInput, getInput, setOutput, warning } from '@actions/core'
 import { getOctokit } from '@actions/github'
 import type { Mock } from 'vitest'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { categorizeCommits, determineVersionBump } from '../src/commits.js'
-import {
-  createOrUpdateRelease,
-  deleteDraftReleases,
-  getAnnotatedTag,
-  getCommits,
-  getGitRef,
-  getTags,
-  listSavrDraftReleases
-} from '../src/github.js'
+import { reconcileDraftReleases, type ReconcileOptions } from '../src/drafts.js'
+import { createReleaseStore, getAnnotatedTag, getCommits, getGitRef, getTags } from '../src/github.js'
 import { buildAndPublishRelease, run } from '../src/main.js'
 import { compileReleaseNotes } from '../src/templates.js'
 import type * as VersionModule from '../src/version.js'
-import {
-  checkInitialVersion,
-  getLatestVersion,
-  incrementVersion,
-  isSupersededBy,
-  resolveVersionBump
-} from '../src/version.js'
+import { checkInitialVersion, getLatestVersion, incrementVersion, resolveVersionBump } from '../src/version.js'
 
 const mockGithubContext = vi.hoisted(() => ({
   ref: 'refs/heads/main',
@@ -39,6 +26,7 @@ vi.mock('@actions/github', () => ({
 }))
 vi.mock('../src/github.js')
 vi.mock('../src/commits.js')
+vi.mock('../src/drafts.js')
 vi.mock('../src/version.js')
 vi.mock('../src/templates.js')
 
@@ -56,6 +44,18 @@ describe('main', () => {
       type: string
     }
   }
+
+  const releaseStore = { name: 'release store' } as never
+
+  // The arguments run() passes when it writes the Draft Release for tagName.
+  const draftCall = (tagName: string, name: string): [never, ReconcileOptions] => [
+    releaseStore,
+    {
+      tagPrefix: 'v',
+      draft: { tagName, name, notes: 'Release notes', targetCommitish: 'head-sha' },
+      dryRun: false
+    }
+  ]
 
   const baseInputs = {
     'github-token': 'token',
@@ -82,10 +82,13 @@ describe('main', () => {
       breaking: []
     })
     ;(compileReleaseNotes as Mock).mockReturnValue('Release notes')
-    ;(createOrUpdateRelease as Mock).mockResolvedValue({
-      url: 'https://github.com/owner/repo/releases/tag/v0.1.0',
-      id: 123,
-      tagName: 'v0.1.0'
+    ;(reconcileDraftReleases as Mock).mockResolvedValue({
+      release: {
+        url: 'https://github.com/owner/repo/releases/tag/v0.1.0',
+        id: 123,
+        tagName: 'v0.1.0'
+      },
+      superseded: []
     })
   }
 
@@ -106,7 +109,8 @@ describe('main', () => {
     ;(getOctokit as Mock).mockReturnValue(mockOctokit)
     ;(getLatestVersion as Mock).mockReturnValue(undefined)
     ;(determineVersionBump as Mock).mockReturnValue(null)
-    ;(listSavrDraftReleases as Mock).mockResolvedValue([])
+    ;(createReleaseStore as Mock).mockReturnValue(releaseStore)
+    ;(reconcileDraftReleases as Mock).mockResolvedValue({ superseded: [] })
     ;(getGitRef as Mock).mockImplementation(async (_context: unknown, ref: string): Promise<GitRefData> => {
       const response = (await mockOctokit.rest.git.getRef({
         owner: 'owner',
@@ -140,13 +144,7 @@ describe('main', () => {
         'head-sha',
         undefined
       )
-      expect(createOrUpdateRelease).toHaveBeenCalledWith(
-        { owner: 'owner', repo: 'repo', octokit: mockOctokit },
-        'v0.1.0',
-        '0.1.0',
-        'Release notes',
-        'head-sha'
-      )
+      expect(reconcileDraftReleases).toHaveBeenCalledWith(...draftCall('v0.1.0', '0.1.0'))
       expect(setOutput).toHaveBeenCalledWith('release-url', 'https://github.com/owner/repo/releases/tag/v0.1.0')
       expect(setOutput).toHaveBeenCalledWith('release-id', '123')
       expect(setOutput).toHaveBeenCalledWith('version', '0.1.0')
@@ -163,7 +161,7 @@ describe('main', () => {
       expect(getTags).not.toHaveBeenCalled()
       expect(mockOctokit.rest.git.getRef).not.toHaveBeenCalled()
       expect(getCommits).not.toHaveBeenCalled()
-      expect(createOrUpdateRelease).not.toHaveBeenCalled()
+      expect(reconcileDraftReleases).not.toHaveBeenCalled()
       expect(setOutput).not.toHaveBeenCalled()
     })
 
@@ -175,7 +173,7 @@ describe('main', () => {
       expect(getTags).not.toHaveBeenCalled()
       expect(mockOctokit.rest.git.getRef).not.toHaveBeenCalled()
       expect(getCommits).not.toHaveBeenCalled()
-      expect(createOrUpdateRelease).not.toHaveBeenCalled()
+      expect(reconcileDraftReleases).not.toHaveBeenCalled()
       expect(setOutput).not.toHaveBeenCalled()
     })
 
@@ -186,7 +184,7 @@ describe('main', () => {
       await run()
 
       expect(mockOctokit.rest.git.getRef).toHaveBeenCalledWith({ owner: 'owner', repo: 'repo', ref: 'heads/main' })
-      expect(createOrUpdateRelease).toHaveBeenCalledTimes(1)
+      expect(reconcileDraftReleases).toHaveBeenCalledTimes(1)
     })
 
     it('should support release branches with slashes', async () => {
@@ -201,7 +199,7 @@ describe('main', () => {
         repo: 'repo',
         ref: 'heads/release/1.0'
       })
-      expect(createOrUpdateRelease).toHaveBeenCalledTimes(1)
+      expect(reconcileDraftReleases).toHaveBeenCalledTimes(1)
     })
 
     it('should update release when tags exist', async () => {
@@ -224,10 +222,13 @@ describe('main', () => {
       ;(determineVersionBump as Mock).mockReturnValue('minor')
       ;(incrementVersion as Mock).mockReturnValue('1.1.0')
       ;(compileReleaseNotes as Mock).mockReturnValue('Release notes')
-      ;(createOrUpdateRelease as Mock).mockResolvedValue({
-        url: 'https://github.com/owner/repo/releases/tag/v1.1.0',
-        id: 123,
-        tagName: 'v1.1.0'
+      ;(reconcileDraftReleases as Mock).mockResolvedValue({
+        release: {
+          url: 'https://github.com/owner/repo/releases/tag/v1.1.0',
+          id: 123,
+          tagName: 'v1.1.0'
+        },
+        superseded: []
       })
 
       await run()
@@ -239,13 +240,7 @@ describe('main', () => {
       )
       expect(getGitRef).toHaveBeenNthCalledWith(2, { owner: 'owner', repo: 'repo', octokit: mockOctokit }, 'heads/main')
       expect(mockOctokit.rest.git.getTag).not.toHaveBeenCalled()
-      expect(createOrUpdateRelease).toHaveBeenCalledWith(
-        { owner: 'owner', repo: 'repo', octokit: mockOctokit },
-        'v1.1.0',
-        '1.1.0',
-        'Release notes',
-        'head-sha'
-      )
+      expect(reconcileDraftReleases).toHaveBeenCalledWith(...draftCall('v1.1.0', '1.1.0'))
       expect(setOutput).toHaveBeenCalledWith('release-url', 'https://github.com/owner/repo/releases/tag/v1.1.0')
       expect(setOutput).toHaveBeenCalledWith('release-id', '123')
       expect(setOutput).toHaveBeenCalledWith('version', '1.1.0')
@@ -270,7 +265,10 @@ describe('main', () => {
 
       await run()
 
-      expect(createOrUpdateRelease).not.toHaveBeenCalled()
+      expect(reconcileDraftReleases).toHaveBeenCalledWith(releaseStore, {
+        ...draftCall('v0.1.0', '0.1.0')[1],
+        dryRun: true
+      })
       expect(setOutput).toHaveBeenCalledWith('skipped', 'true')
       expect(setOutput).toHaveBeenCalledWith('release-url', '')
       expect(setOutput).toHaveBeenCalledWith('release-id', '')
@@ -303,7 +301,10 @@ describe('main', () => {
 
       await run()
 
-      expect(createOrUpdateRelease).not.toHaveBeenCalled()
+      expect(reconcileDraftReleases).toHaveBeenCalledWith(releaseStore, {
+        ...draftCall('v1.1.0', '1.1.0')[1],
+        dryRun: true
+      })
       expect(setOutput).toHaveBeenCalledWith('skipped', 'true')
       expect(setOutput).toHaveBeenCalledWith('release-url', '')
       expect(setOutput).toHaveBeenCalledWith('release-id', '')
@@ -324,7 +325,7 @@ describe('main', () => {
 
       // Should not process commits or create release
       expect(getCommits).not.toHaveBeenCalled()
-      expect(createOrUpdateRelease).not.toHaveBeenCalled()
+      expect(reconcileDraftReleases).toHaveBeenCalledWith(releaseStore, { tagPrefix: 'v', dryRun: false })
       expect(setOutput).toHaveBeenCalledWith('skipped', 'true')
       expect(setOutput).toHaveBeenCalledWith('release-url', '')
       expect(setOutput).toHaveBeenCalledWith('release-id', '')
@@ -361,10 +362,13 @@ describe('main', () => {
       ;(determineVersionBump as Mock).mockReturnValue('minor')
       ;(incrementVersion as Mock).mockReturnValue('1.1.0')
       ;(compileReleaseNotes as Mock).mockReturnValue('Release notes')
-      ;(createOrUpdateRelease as Mock).mockResolvedValue({
-        url: 'https://github.com/owner/repo/releases/tag/v1.1.0',
-        id: 123,
-        tagName: 'v1.1.0'
+      ;(reconcileDraftReleases as Mock).mockResolvedValue({
+        release: {
+          url: 'https://github.com/owner/repo/releases/tag/v1.1.0',
+          id: 123,
+          tagName: 'v1.1.0'
+        },
+        superseded: []
       })
 
       await run()
@@ -389,13 +393,7 @@ describe('main', () => {
         'head-sha',
         'tag-commit-sha'
       )
-      expect(createOrUpdateRelease).toHaveBeenCalledWith(
-        { owner: 'owner', repo: 'repo', octokit: mockOctokit },
-        'v1.1.0',
-        '1.1.0',
-        'Release notes',
-        'head-sha'
-      )
+      expect(reconcileDraftReleases).toHaveBeenCalledWith(...draftCall('v1.1.0', '1.1.0'))
     })
 
     it('should skip release when HEAD matches dereferenced annotated tag commit', async () => {
@@ -420,7 +418,7 @@ describe('main', () => {
 
       expect(mockOctokit.rest.git.getTag).toHaveBeenCalledTimes(1)
       expect(getCommits).not.toHaveBeenCalled()
-      expect(createOrUpdateRelease).not.toHaveBeenCalled()
+      expect(reconcileDraftReleases).toHaveBeenCalledWith(releaseStore, { tagPrefix: 'v', dryRun: false })
       expect(setOutput).toHaveBeenCalledWith('skipped', 'true')
       expect(setOutput).toHaveBeenCalledWith('release-url', '')
       expect(setOutput).toHaveBeenCalledWith('release-id', '')
@@ -450,7 +448,7 @@ describe('main', () => {
 
       await run()
 
-      expect(createOrUpdateRelease).not.toHaveBeenCalled()
+      expect(reconcileDraftReleases).toHaveBeenCalledWith(releaseStore, { tagPrefix: 'v', dryRun: false })
       expect(setOutput).toHaveBeenCalledWith('skipped', 'true')
       expect(setOutput).toHaveBeenCalledWith('release-url', '')
       expect(setOutput).toHaveBeenCalledWith('release-id', '')
@@ -459,93 +457,16 @@ describe('main', () => {
       expect(setOutput).toHaveBeenCalledWith('dry-run', 'false')
     })
 
-    describe('superseded draft cleanup', () => {
-      const githubContextArg = { owner: 'owner', repo: 'repo', octokit: mockOctokit }
+    it('passes dry run on to the Superseded Draft cleanup when there is nothing to release', async () => {
+      ;(getBooleanInput as Mock).mockImplementation((name: string) => name === 'dry-run')
+      ;(getTags as Mock).mockResolvedValue([{ name: 'v1.0.0', version: '1.0.0' }])
+      ;(getLatestVersion as Mock).mockReturnValue({ name: 'v1.0.0', version: '1.0.0' })
+      mockOctokit.rest.git.getRef.mockResolvedValue({ data: { object: { sha: 'same-sha' } } })
 
-      // v1.0.0 was pushed by hand; the v0.5.0 draft SAVR made before it is now stale.
-      const setupHandPushedTag = async () => {
-        const actualVersion = await vi.importActual<typeof VersionModule>('../src/version.js')
-        ;(isSupersededBy as Mock).mockImplementation(actualVersion.isSupersededBy)
-        ;(getTags as Mock).mockResolvedValue([{ name: 'v1.0.0', version: '1.0.0' }])
-        ;(getLatestVersion as Mock).mockReturnValue({ name: 'v1.0.0', version: '1.0.0' })
-        ;(listSavrDraftReleases as Mock).mockResolvedValue([
-          { id: 1, tagName: 'v0.5.0' },
-          { id: 2, tagName: 'v1.0.0' },
-          { id: 3, tagName: 'v1.1.0' },
-          { id: 4, tagName: 'api-v0.1.0' }
-        ])
-      }
+      await run()
 
-      const setupNoBumpCommits = () => {
-        mockOctokit.rest.git.getRef.mockImplementation(({ ref }: { ref: string }) =>
-          Promise.resolve({ data: { object: { sha: ref === 'tags/v1.0.0' ? 'tag-sha' : 'head-sha' } } })
-        )
-        ;(getCommits as Mock).mockResolvedValue([
-          { type: 'chore', subject: 'deps update', message: 'chore: deps update', breaking: false }
-        ])
-        ;(categorizeCommits as Mock).mockReturnValue({ features: [], fixes: [], breaking: [] })
-      }
-
-      it('deletes drafts no longer ahead of the latest Version Tag when HEAD is the tagged commit', async () => {
-        await setupHandPushedTag()
-        mockOctokit.rest.git.getRef.mockResolvedValue({ data: { object: { sha: 'same-sha' } } })
-
-        await run()
-
-        expect(deleteDraftReleases).toHaveBeenCalledWith(githubContextArg, [
-          { id: 1, tagName: 'v0.5.0' },
-          { id: 2, tagName: 'v1.0.0' }
-        ])
-        expect(setOutput).toHaveBeenCalledWith('skipped', 'true')
-      })
-
-      it('deletes drafts no longer ahead of the latest Version Tag when no Version Bump is needed', async () => {
-        await setupHandPushedTag()
-        setupNoBumpCommits()
-
-        await run()
-
-        expect(deleteDraftReleases).toHaveBeenCalledWith(githubContextArg, [
-          { id: 1, tagName: 'v0.5.0' },
-          { id: 2, tagName: 'v1.0.0' }
-        ])
-        expect(setOutput).toHaveBeenCalledWith('skipped', 'true')
-      })
-
-      it('only reports superseded drafts in dry-run mode', async () => {
-        await setupHandPushedTag()
-        setupNoBumpCommits()
-        ;(getBooleanInput as Mock).mockImplementation((name: string) => name === 'dry-run')
-
-        await run()
-
-        expect(deleteDraftReleases).not.toHaveBeenCalled()
-        expect(info).toHaveBeenCalledWith('Dry run - would delete superseded draft release v0.5.0 (ID: 1)')
-        expect(info).toHaveBeenCalledWith('Dry run - would delete superseded draft release v1.0.0 (ID: 2)')
-      })
-
-      it('does nothing when no draft is superseded', async () => {
-        await setupHandPushedTag()
-        setupNoBumpCommits()
-        ;(listSavrDraftReleases as Mock).mockResolvedValue([{ id: 3, tagName: 'v1.1.0' }])
-
-        await run()
-
-        expect(deleteDraftReleases).not.toHaveBeenCalled()
-      })
-
-      it('warns but still skips the release when listing drafts fails', async () => {
-        await setupHandPushedTag()
-        setupNoBumpCommits()
-        ;(listSavrDraftReleases as Mock).mockRejectedValue(new Error('Forbidden'))
-
-        await expect(run()).resolves.toBeUndefined()
-
-        expect(deleteDraftReleases).not.toHaveBeenCalled()
-        expect(warning).toHaveBeenCalledWith('Failed to clean up superseded draft releases: Forbidden')
-        expect(setOutput).toHaveBeenCalledWith('skipped', 'true')
-        expect(setOutput).toHaveBeenCalledWith('tag', 'v1.0.0')
-      })
+      expect(reconcileDraftReleases).toHaveBeenCalledWith(releaseStore, { tagPrefix: 'v', dryRun: true })
+      expect(setOutput).toHaveBeenCalledWith('skipped', 'true')
     })
 
     describe('bump-minor-pre-major', () => {
@@ -577,8 +498,15 @@ describe('main', () => {
         ;(categorizeCommits as Mock).mockReturnValue({ features: [], fixes: [], breaking: [breakingCommit] })
         ;(determineVersionBump as Mock).mockReturnValue('major')
         ;(compileReleaseNotes as Mock).mockReturnValue('Release notes')
-        ;(createOrUpdateRelease as Mock).mockImplementation((_context: unknown, tag: string) =>
-          Promise.resolve({ url: `https://github.com/owner/repo/releases/tag/${tag}`, id: 123, tagName: tag })
+        ;(reconcileDraftReleases as Mock).mockImplementation((_store: unknown, { draft }: ReconcileOptions) =>
+          Promise.resolve({
+            release: draft && {
+              url: `https://github.com/owner/repo/releases/tag/${draft.tagName}`,
+              id: 123,
+              tagName: draft.tagName
+            },
+            superseded: []
+          })
         )
       }
 
@@ -588,13 +516,7 @@ describe('main', () => {
 
         await run()
 
-        expect(createOrUpdateRelease).toHaveBeenCalledWith(
-          { owner: 'owner', repo: 'repo', octokit: mockOctokit },
-          'v0.4.0',
-          '0.4.0',
-          'Release notes',
-          'head-sha'
-        )
+        expect(reconcileDraftReleases).toHaveBeenCalledWith(...draftCall('v0.4.0', '0.4.0'))
       })
 
       it('should draft a major release for a breaking change in Initial Development when off', async () => {
@@ -603,13 +525,7 @@ describe('main', () => {
 
         await run()
 
-        expect(createOrUpdateRelease).toHaveBeenCalledWith(
-          { owner: 'owner', repo: 'repo', octokit: mockOctokit },
-          'v1.0.0',
-          '1.0.0',
-          'Release notes',
-          'head-sha'
-        )
+        expect(reconcileDraftReleases).toHaveBeenCalledWith(...draftCall('v1.0.0', '1.0.0'))
       })
 
       it('should warn when there are no tags and initial-version leaves Initial Development', async () => {
@@ -661,30 +577,33 @@ describe('main', () => {
   })
 
   describe('buildAndPublishRelease', () => {
-    const githubContext = { owner: 'owner', repo: 'repo', octokit: mockOctokit } as never
     const categorizedCommits = { features: [], fixes: [], breaking: [] }
 
-    it('compiles notes and creates the release, returning create outputs', async () => {
+    it('compiles notes and writes the Draft Release, returning its outputs', async () => {
       ;(compileReleaseNotes as Mock).mockReturnValue('Release notes')
-      ;(createOrUpdateRelease as Mock).mockResolvedValue({
-        url: 'https://github.com/owner/repo/releases/tag/v2.0.0',
-        id: 42,
-        tagName: 'v2.0.0'
+      ;(reconcileDraftReleases as Mock).mockResolvedValue({
+        release: {
+          url: 'https://github.com/owner/repo/releases/tag/v2.0.0',
+          id: 42,
+          tagName: 'v2.0.0'
+        },
+        superseded: []
       })
 
-      const outputs = await buildAndPublishRelease(githubContext, {
+      const outputs = await buildAndPublishRelease(releaseStore, {
         version: '2.0.0',
         tagName: 'v2.0.0',
         releaseName: '2.0.0',
         categorizedCommits,
         releaseNotesTemplate: '',
+        tagPrefix: 'v',
         dryRun: false,
         dryRunMessage: 'Dry run - would create/update release with:',
         targetCommitish: 'head-sha'
       })
 
       expect(compileReleaseNotes).toHaveBeenCalledWith('', { version: '2.0.0', ...categorizedCommits })
-      expect(createOrUpdateRelease).toHaveBeenCalledWith(githubContext, 'v2.0.0', '2.0.0', 'Release notes', 'head-sha')
+      expect(reconcileDraftReleases).toHaveBeenCalledWith(...draftCall('v2.0.0', '2.0.0'))
       expect(outputs).toEqual({
         skipped: false,
         releaseUrl: 'https://github.com/owner/repo/releases/tag/v2.0.0',
@@ -694,21 +613,25 @@ describe('main', () => {
       })
     })
 
-    it('skips the API call and returns skipped outputs in dry-run mode', async () => {
+    it('passes dry run on and returns skipped outputs in dry-run mode', async () => {
       ;(compileReleaseNotes as Mock).mockReturnValue('Release notes')
 
-      const outputs = await buildAndPublishRelease(githubContext, {
+      const outputs = await buildAndPublishRelease(releaseStore, {
         version: '2.0.0',
         tagName: 'v2.0.0',
         releaseName: '2.0.0',
         categorizedCommits,
         releaseNotesTemplate: '',
+        tagPrefix: 'v',
         dryRun: true,
         dryRunMessage: 'Dry run - would create/update release with:',
         targetCommitish: 'head-sha'
       })
 
-      expect(createOrUpdateRelease).not.toHaveBeenCalled()
+      expect(reconcileDraftReleases).toHaveBeenCalledWith(releaseStore, {
+        ...draftCall('v2.0.0', '2.0.0')[1],
+        dryRun: true
+      })
       expect(outputs).toEqual({
         skipped: true,
         version: '2.0.0',

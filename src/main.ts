@@ -1,28 +1,13 @@
-import { getBooleanInput, getInput, info, setOutput, warning } from '@actions/core'
+import { getBooleanInput, getInput, info, setOutput } from '@actions/core'
 import { context, getOctokit } from '@actions/github'
 import { valid } from 'semver'
 
 import { categorizeCommits, type CategorizedCommits, determineVersionBump } from './commits.js'
-import {
-  createOrUpdateRelease,
-  deleteDraftReleases,
-  getAnnotatedTag,
-  getCommits,
-  getGitRef,
-  getTags,
-  type GitHubContext,
-  listSavrDraftReleases
-} from './github.js'
+import { reconcileDraftReleases, type ReleaseStore } from './drafts.js'
+import { createReleaseStore, getAnnotatedTag, getCommits, getGitRef, getTags, type GitHubContext } from './github.js'
 import { compileReleaseNotes } from './templates.js'
 import { sanitizeLogOutput } from './utils.js'
-import {
-  checkInitialVersion,
-  getLatestVersion,
-  incrementVersion,
-  isSupersededBy,
-  resolveVersionBump,
-  type Tag
-} from './version.js'
+import { checkInitialVersion, getLatestVersion, incrementVersion, resolveVersionBump } from './version.js'
 
 interface ReleaseOutputs {
   skipped: boolean
@@ -38,6 +23,7 @@ interface BuildReleaseOptions {
   releaseName: string
   categorizedCommits: CategorizedCommits
   releaseNotesTemplate: string
+  tagPrefix: string
   dryRun: boolean
   dryRunMessage: string
   targetCommitish: string
@@ -60,14 +46,16 @@ const processCommits = async (githubContext: GitHubContext, head: string, sinceT
   return { commits, categorizedCommits }
 }
 
-// Compiles release notes and either logs a dry-run preview or creates/updates
-// the draft release. Returns the outputs the caller should publish — shared by
-// the initial-release and version-bump paths in run().
+// Compiles release notes and hands the Draft Release to reconciliation, which
+// writes it (or only reports it in a dry run) and removes Superseded Drafts.
+// Returns the outputs the caller should publish — shared by the
+// initial-release and Version Bump paths in run().
 export const buildAndPublishRelease = async (
-  githubContext: GitHubContext,
+  releaseStore: ReleaseStore,
   options: BuildReleaseOptions
 ): Promise<ReleaseOutputs> => {
-  const { version, tagName, releaseName, categorizedCommits, releaseNotesTemplate, dryRun, dryRunMessage } = options
+  const { version, tagName, releaseName, categorizedCommits, releaseNotesTemplate, tagPrefix, dryRun, dryRunMessage } =
+    options
 
   const releaseNotes = compileReleaseNotes(releaseNotesTemplate, {
     version,
@@ -80,6 +68,15 @@ export const buildAndPublishRelease = async (
     info('Release notes:')
     // Sanitize release notes to prevent workflow command injection
     info(sanitizeLogOutput(releaseNotes))
+  }
+
+  const { release } = await reconcileDraftReleases(releaseStore, {
+    tagPrefix,
+    draft: { tagName, name: releaseName, notes: releaseNotes, targetCommitish: options.targetCommitish },
+    dryRun
+  })
+
+  if (!release) {
     return {
       skipped: true,
       version,
@@ -87,51 +84,12 @@ export const buildAndPublishRelease = async (
     }
   }
 
-  const release = await createOrUpdateRelease(
-    githubContext,
-    tagName,
-    releaseName,
-    releaseNotes,
-    options.targetCommitish
-  )
-
   return {
     skipped: false,
     releaseUrl: release.url,
     releaseId: release.id.toString(),
     version,
     tag: release.tagName
-  }
-}
-
-// When no Version Bump is needed, SAVR-managed drafts at or below the latest
-// Version Tag (e.g. a v0.5.0 draft after v1.0.0 was tagged by hand) would
-// otherwise linger and could be published by mistake. Best-effort: failures
-// warn instead of failing a run that has nothing to release anyway.
-const deleteSupersededDrafts = async (
-  githubContext: GitHubContext,
-  latestTag: Tag,
-  tagPrefix: string,
-  dryRun: boolean
-): Promise<void> => {
-  try {
-    const drafts = await listSavrDraftReleases(githubContext)
-    const superseded = drafts.filter(draft => isSupersededBy(draft.tagName, latestTag, tagPrefix))
-
-    if (superseded.length === 0) {
-      return
-    }
-
-    if (dryRun) {
-      superseded.forEach(draft => {
-        info(`Dry run - would delete superseded draft release ${draft.tagName} (ID: ${String(draft.id)})`)
-      })
-      return
-    }
-
-    await deleteDraftReleases(githubContext, superseded)
-  } catch (err) {
-    warning(`Failed to clean up superseded draft releases: ${err instanceof Error ? err.message : String(err)}`)
   }
 }
 
@@ -187,6 +145,7 @@ export const run = async (): Promise<void> => {
   setOutput('dry-run', dryRun.toString())
 
   const githubContext = { owner, repo, octokit }
+  const releaseStore = createReleaseStore(githubContext)
   const setReleaseOutputs = (outputs: ReleaseOutputs) => {
     setOutput('skipped', outputs.skipped.toString())
     setOutput('release-url', outputs.releaseUrl ?? '')
@@ -206,12 +165,13 @@ export const run = async (): Promise<void> => {
     const { categorizedCommits } = await processCommits(githubContext, headRef.object.sha)
 
     setReleaseOutputs(
-      await buildAndPublishRelease(githubContext, {
+      await buildAndPublishRelease(releaseStore, {
         version: initialVersion,
         tagName: `${tagPrefix}${initialVersion}`,
         releaseName: initialVersion,
         categorizedCommits,
         releaseNotesTemplate,
+        tagPrefix,
         dryRun,
         dryRunMessage: 'Dry run - would create initial release with:',
         targetCommitish: headRef.object.sha
@@ -245,7 +205,7 @@ export const run = async (): Promise<void> => {
   // If HEAD and tag point to the same commit, there are no new commits to process
   if (headData.object.sha === latestTagCommitSha) {
     info('HEAD and latest tag point to the same commit - no changes to release')
-    await deleteSupersededDrafts(githubContext, latestTag, tagPrefix, dryRun)
+    await reconcileDraftReleases(releaseStore, { tagPrefix, dryRun })
     setReleaseOutputs({
       skipped: true,
       version: latestTag.version,
@@ -261,7 +221,7 @@ export const run = async (): Promise<void> => {
 
   if (versionBump == null) {
     info('No version bump needed - skipping release creation')
-    await deleteSupersededDrafts(githubContext, latestTag, tagPrefix, dryRun)
+    await reconcileDraftReleases(releaseStore, { tagPrefix, dryRun })
     setReleaseOutputs({
       skipped: true,
       version: latestTag.version,
@@ -273,12 +233,13 @@ export const run = async (): Promise<void> => {
   newVersion = incrementVersion(newVersion, resolveVersionBump(versionBump, newVersion, { bumpMinorPreMajor }))
 
   setReleaseOutputs(
-    await buildAndPublishRelease(githubContext, {
+    await buildAndPublishRelease(releaseStore, {
       version: newVersion,
       tagName: `${tagPrefix}${newVersion}`,
       releaseName: newVersion,
       categorizedCommits,
       releaseNotesTemplate,
+      tagPrefix,
       dryRun,
       dryRunMessage: 'Dry run - would create/update release with:',
       targetCommitish: headData.object.sha
