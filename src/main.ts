@@ -40,7 +40,7 @@ interface BuildReleaseOptions {
   releaseNotesTemplate: string
   dryRun: boolean
   dryRunMessage: string
-  targetCommitish?: string
+  targetCommitish: string
 }
 
 const BRANCH_REF_PREFIX = 'refs/heads/'
@@ -87,11 +87,13 @@ export const buildAndPublishRelease = async (
     }
   }
 
-  // Preserve the exact call arity of the two original branches: the
-  // initial-release path omits targetCommitish entirely.
-  const release = options.targetCommitish
-    ? await createOrUpdateRelease(githubContext, tagName, releaseName, releaseNotes, options.targetCommitish)
-    : await createOrUpdateRelease(githubContext, tagName, releaseName, releaseNotes)
+  const release = await createOrUpdateRelease(
+    githubContext,
+    tagName,
+    releaseName,
+    releaseNotes,
+    options.targetCommitish
+  )
 
   return {
     skipped: false,
@@ -211,7 +213,8 @@ export const run = async (): Promise<void> => {
         categorizedCommits,
         releaseNotesTemplate,
         dryRun,
-        dryRunMessage: 'Dry run - would create initial release with:'
+        dryRunMessage: 'Dry run - would create initial release with:',
+        targetCommitish: headRef.object.sha
       })
     )
     return

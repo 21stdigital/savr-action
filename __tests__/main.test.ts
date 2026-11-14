@@ -144,7 +144,8 @@ describe('main', () => {
         { owner: 'owner', repo: 'repo', octokit: mockOctokit },
         'v0.1.0',
         '0.1.0',
-        'Release notes'
+        'Release notes',
+        'head-sha'
       )
       expect(setOutput).toHaveBeenCalledWith('release-url', 'https://github.com/owner/repo/releases/tag/v0.1.0')
       expect(setOutput).toHaveBeenCalledWith('release-id', '123')
@@ -691,27 +692,6 @@ describe('main', () => {
         version: '2.0.0',
         tag: 'v2.0.0'
       })
-    })
-
-    it('omits targetCommitish from the create call when not provided', async () => {
-      ;(compileReleaseNotes as Mock).mockReturnValue('Release notes')
-      ;(createOrUpdateRelease as Mock).mockResolvedValue({
-        url: 'https://github.com/owner/repo/releases/tag/v0.1.0',
-        id: 7,
-        tagName: 'v0.1.0'
-      })
-
-      await buildAndPublishRelease(githubContext, {
-        version: '0.1.0',
-        tagName: 'v0.1.0',
-        releaseName: '0.1.0',
-        categorizedCommits,
-        releaseNotesTemplate: '',
-        dryRun: false,
-        dryRunMessage: 'Dry run - would create initial release with:'
-      })
-
-      expect(createOrUpdateRelease).toHaveBeenCalledWith(githubContext, 'v0.1.0', '0.1.0', 'Release notes')
     })
 
     it('skips the API call and returns skipped outputs in dry-run mode', async () => {
