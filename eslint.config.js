@@ -1,5 +1,5 @@
 import eslint from '@eslint/js'
-import pluginImport from 'eslint-plugin-import'
+import { importX } from 'eslint-plugin-import-x'
 import pluginPreferArrowFunctions from 'eslint-plugin-prefer-arrow-functions'
 import pluginSimpleImportSort from 'eslint-plugin-simple-import-sort'
 import tseslint from 'typescript-eslint'
@@ -31,7 +31,7 @@ export default tseslint.config(
   },
   {
     plugins: {
-      import: pluginImport
+      'import-x': importX
     }
   },
   {
@@ -39,9 +39,9 @@ export default tseslint.config(
       'simple-import-sort': pluginSimpleImportSort
     },
     rules: {
-      'import/first': 'error',
-      'import/newline-after-import': 'error',
-      'import/no-duplicates': 'error',
+      'import-x/first': 'error',
+      'import-x/newline-after-import': 'error',
+      'import-x/no-duplicates': 'error',
       'simple-import-sort/imports': 'error',
       'simple-import-sort/exports': 'error'
     }
